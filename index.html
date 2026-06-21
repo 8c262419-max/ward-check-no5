@@ -17,32 +17,13 @@
   </style>
 </head>
 <body>
-
-<div id="root">
-  <div style="padding:50px 20px; text-align:center; color:#7C5CBF; font-size:16px; font-weight:bold; font-family:sans-serif;">
-    <div style="width:40px; height:40px; border:4px solid #E4DEFF; border-top:4px solid #7C5CBF; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 16px;"></div>
-    系統載入中...<br/>
-    <span style="font-size:12px; color:#9E9AB5; font-weight:normal; display:inline-block; margin-top:8px;">正在為您初始化 8C-5號車 點班系統...</span>
-  </div>
-</div>
+<div id="root" style="padding:30px; text-align:center; color:#9E9AB5; font-size:15px; font-weight:bold;">網頁載入中，若長時間維持此畫面請重新整理...</div>
 
 <script>
-// 【超強第一道防線】全域防崩潰，萬一出錯直接顯示強制刷新按鈕，絕不留白畫面
-window.onerror = function(message, source, lineno, colno, error) {
-  var rootDiv = document.getElementById('root');
-  if (rootDiv) {
-    rootDiv.innerHTML = '<div style="padding:30px; text-align:center; color:#FF6B6B; font-weight:bold;">' +
-      '<h3>⚠️ 系統啟動失敗</h3>' +
-      '<p style="font-size:13px; margin-top:10px; color:#555;">原因：' + message + '</p>' +
-      '<button onclick="window.location.reload(true)" style="margin-top:15px; padding:10px 20px; background:#7C5CBF; color:#fff; border:none; border-radius:8px; font-weight:bold;">點此強制重新整理</button>' +
-      '</div>';
-  }
-  return false;
-};
-
 const { useState, useEffect } = React;
 const e = React.createElement;
 
+// 建議維持原有的試算表傳送位置，如需更換再自行修改 URL
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7zsykFlp7zcyIxCP5iieN7v-82SsDEkbYPNGT1z7W7wQsyDq5rfgK5d_CfgyrGI5T/exec";
 const STORAGE_KEY = "ward_check_records_8c_v5";
 
@@ -54,57 +35,35 @@ function saveRecords(recs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recs)); } catch {}
 }
 
-const TRIPLE_ROOMS = [1, 2, 20, 21];
-const SINGLE_ROOMS = [3, 5, 6, 17, 18, 19, 22];
-const ROOM_CONFIG  = [];
-for (let r = 1; r <= 22; r++) {
-  if ([4,14].includes(r)) continue;
-  if (TRIPLE_ROOMS.includes(r)) { ROOM_CONFIG.push({ room: r, subs: ["1","2","3"] }); continue; }
-  if (SINGLE_ROOMS.includes(r)) { ROOM_CONFIG.push({ room: r, subs: [""]         }); continue; }
-  ROOM_CONFIG.push({ room: r, subs: ["1","2"] });
-}
-const ALL_BEDS = [];
-ROOM_CONFIG.forEach(({ room, subs }) => subs.forEach(s => ALL_BEDS.push(s ? `${room}-${s}` : `${room}`)));
-
-// 點班品項配置
+// 常態點班項目設定
 const ITEMS_CONFIG = [
-  { id: "dressing_scissors", label: "敷料剪",               icon: "✂️", type: "count_only", expected: 1, max: 1, weeklyOnly: false },
-  { id: "ipad_count",        label: "iPad",                icon: "📱", type: "split",      poolMax: 7, weeklyOnly: false },
-  { id: "phone_count",       label: "手機",                icon: "📞", type: "split",      poolMax: 7, weeklyOnly: false },
-  { id: "heating_lamp",      label: "烤燈",                icon: "💡", type: "count_only", expected: 1, max: 1, weeklyOnly: false },
-  // 週二大點班限定
-  { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", type: "count_only", expected: 2, max: 2, weeklyOnly: true },
-  { id: "garden_well",       label: "Garden Well",         icon: "🕳️", type: "count_only", expected: 1, max: 1, weeklyOnly: true },
-  { id: "o2_cylinder_s",     label: "小桶氧氣桶",           icon: "🧪", type: "count_only", expected: 6, max: 6, weeklyOnly: true }
+  { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1, max: 5 },
+  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7, max: 15 },
+  { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7, max: 15 },
+  { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1, max: 5 }
 ];
 
-function isTuesday(dateStr) {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  return d.getDay() === 2;
-}
+// 每週二限定項目設定
+const TUESDAY_ITEMS_CONFIG = [
+  { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2, max: 10 },
+  { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1, max: 5 },
+  { id: "o2_cylinder_small", label: "小桶氧氣桶", icon: "🟢", expected: 6, max: 15 }
+];
 
 function defaultItems() {
   const o = {};
-  ITEMS_CONFIG.forEach(c => { o[c.id] = { count:0, beds:[], loanCount:0, loanNote:"", note:"" }; });
+  ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", note: "" }; });
+  TUESDAY_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", note: "" }; });
   return o;
 }
+
 function itemsFromRecord(rec) {
   const o = defaultItems();
   if (!rec || !rec.items) return o;
   (rec.items || []).forEach(it => {
-    if (it && it.id && o[it.id]) o[it.id] = { loanCount:0, loanNote:"", beds:[], note:"", ...it.value };
+    if (it && it.id && o[it.id]) o[it.id] = { loanCount: 0, loanNote: "", note: "", ...it.value };
   });
   return o;
-}
-
-function effExpected(cfg, v) {
-  if (cfg.type === "count_only" && cfg.expected != null) return Math.max(0, cfg.expected - (v.loanCount || 0));
-  return null;
-}
-function effPoolMax(cfg, v) {
-  if (cfg.type === "split") return Math.max(0, cfg.poolMax - (v.loanCount || 0));
-  return cfg.poolMax;
 }
 
 const SHIFTS      = ["白班", "小夜", "大夜"];
@@ -137,7 +96,6 @@ const SFX = {
   toggle: ()=>beep(660,"sine",0.08,0.15),
   plus:   ()=>beep(740,"triangle",0.07,0.14),
   minus:  ()=>beep(440,"triangle",0.07,0.12),
-  bed:    ()=>beep(820,"sine",0.06,0.13),
   error:  ()=>{[0,0.2,0.4].forEach(d=>beep(180,"square",0.15,0.25,d));},
   success:()=>{[523,659,784,1046].forEach((f,i)=>beep(f,"sine",0.18,0.2,i*0.12));},
   nav:    ()=>beep(600,"sine",0.05,0.1),
@@ -146,27 +104,31 @@ const SFX = {
   loan:   ()=>beep(550,"triangle",0.12,0.18),
 };
 
-function validate(items, dateStr) {
+function validate(items, isTuesday) {
   const errors = [];
-  const showTuesdayItems = isTuesday(dateStr);
-
+  
+  // 驗證常態項目
   ITEMS_CONFIG.forEach(cfg => {
-    if (cfg.weeklyOnly && !showTuesdayItems) return;
-    const v = items[cfg.id] || { count:0, beds:[], loanCount:0 };
-    const eff = effExpected(cfg, v);
-    const eMax = effPoolMax(cfg, v);
-    if (cfg.type === "count_only" && eff != null && (v.count||0) !== eff) {
+    const v = items[cfg.id] || { count:0, loanCount:0 };
+    const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
+    if ((v.count||0) !== effExpected) {
       const lc = v.loanCount||0;
-      errors.push({ id:cfg.id, msg:`【${cfg.label}】應有 ${eff} 個${lc>0?`（扣除外借 ${lc} 個）`:""}，現為 ${v.count||0} 個` });
-    }
-    if (cfg.type === "split") {
-      const tot = (v.count||0)+(v.beds?.length||0);
-      const lc = v.loanCount||0;
-      const suffix = lc>0?`（總上限 ${cfg.poolMax}，外借 ${lc} 個）`:"";
-      if (tot < eMax) errors.push({ id:cfg.id, msg:`【${cfg.label}】護理站 ${v.count||0} + 使用中 ${v.beds?.length||0} = ${tot}，尚差 ${eMax-tot} 個未交代${suffix}` });
-      if (tot > eMax) errors.push({ id:cfg.id, msg:`【${cfg.label}】共 ${tot} 個超過有效上限 ${eMax}${suffix}` });
+      errors.push({ id:cfg.id, msg:`【${cfg.label}】應有 ${effExpected} 台/支${lc>0?`（扣除外借 ${lc}）`:""}，現為 ${v.count||0}` });
     }
   });
+
+  // 如果是週二，加開驗證特殊項目
+  if (isTuesday) {
+    TUESDAY_ITEMS_CONFIG.forEach(cfg => {
+      const v = items[cfg.id] || { count:0, loanCount:0 };
+      const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
+      if ((v.count||0) !== effExpected) {
+        const lc = v.loanCount||0;
+        errors.push({ id:cfg.id, msg:`【${cfg.label}】應有 ${effExpected} 個/台${lc>0?`（扣除外借 ${lc}）`:""}，現為 ${v.count||0}` });
+      }
+    });
+  }
+
   return errors;
 }
 
@@ -185,7 +147,7 @@ function Modal({ title, body, onClose, type="error" }) {
       e("div", { style: { textAlign:"center",fontSize:52,marginBottom:8 } }, ico),
       e("div", { style: { fontWeight:800,fontSize:18,color:col,textAlign:"center",marginBottom:14,lineHeight:1.3 } }, title),
       e("div", { style: { background:bg,borderRadius:14,padding:14,marginBottom:18,border:`1px solid ${col}55` } }, 
-        typeof body==="string" ? e("p", { style: { margin:0,fontSize:14,lineHeight:1.9,whiteSpace:"pre-wrap" } }, body) : body
+        typeof body==="string" ? e("p", { style: { margin:0,fontSize:14,lineHeight:1.9 } }, body) : body
       ),
       e("button", { onClick:()=>{ SFX.tap(); onClose(); }, style: { width:"100%",padding:15,borderRadius:16,border:"none",background:col,color:"#fff",fontWeight:800,fontSize:16,cursor:"pointer" } }, "我知道了 👍")
     )
@@ -207,31 +169,6 @@ function ConfirmModal({ title, body, onConfirm, onCancel }) {
   );
 }
 
-function BedPicker({ selected, onChange, remaining }) {
-  const currentSelected = selected || [];
-  return e("div", null,
-    e("div", { style: { fontSize:12,color:P.muted,marginBottom:6,display:"flex",alignItems:"center",gap:6 } }, 
-      "🛏 選擇使用床號",
-      e("span", { style: { fontWeight:700,color:remaining<=0?P.coral:P.teal,background:remaining<=0?P.coralL:P.tealL,borderRadius:20,padding:"1px 8px",fontSize:11 } }, `剩餘額度 ${remaining}`)
-    ),
-    e("div", { style: { maxHeight:200,overflowY:"auto",background:P.bg,borderRadius:12,padding:"8px 6px",border:`1px solid ${P.border}` } },
-      ROOM_CONFIG.map(({ room, subs })=>
-        e("div", { key: room, style: { display:"flex",alignItems:"center",flexWrap:"wrap",gap:4,marginBottom:5 } },
-          e("span", { style: { fontSize:11,color:P.muted,width:30,textAlign:"right",flexShrink:0 } }, `${room}室`),
-          subs.map(s=>{
-            const label=s?`${room}-${s}`:`${room}`;
-            const on=currentSelected.includes(label), dis=!on&&remaining<=0;
-            return e("button", { key: label, onClick:()=>{ if(dis)return; SFX.bed(); onChange(on?currentSelected.filter(x=>x!==label):[...currentSelected,label]); },
-              style: { minWidth:46,height:34,borderRadius:10,fontSize:12,cursor:dis?"not-allowed":"pointer",
-                border:`2px solid ${on?P.pri:P.border}`,background:on?P.pri:dis?"#F1EFF8":P.card,
-                color:on?"#fff":dis?P.muted:"#333",fontWeight:on?700:400,opacity:dis?0.4:1,transition:"all .12s" } }, label);
-          })
-        )
-      )
-    )
-  );
-}
-
 function cBtn(bg, color, disabled=false) {
   return { width:36,height:36,borderRadius:9,background:disabled?"#eee":bg,color:disabled?P.muted:color,
     border:`2px solid ${disabled?P.border:P.pri}`,fontWeight:800,fontSize:20,cursor:disabled?"not-allowed":"pointer",lineHeight:1,transition:"all .1s" };
@@ -243,107 +180,55 @@ function LoanRow({ v, onChange, maxLoan }) {
   return e("div", { style: { background:P.orangeL, borderRadius:12, padding:"10px 12px", marginBottom:10, border:`1.5px solid ${P.orange}44` } },
     e("div", { style: { display:"flex", alignItems:"center", gap:8, marginBottom: showNote ? 8 : 0 } },
       e("span", { style: { fontSize:14 } }, "🔄"),
-      e("span", { style: { fontSize:13, fontWeight:700, color:P.orange, flex:1 } }, "外借／維修個數"),
+      e("span", { style: { fontSize:13, fontWeight:700, color:P.orange, flex:1 } }, "外借／維修台數"),
       e("button", { onClick:()=>{ SFX.loan(); onChange({ ...v, loanCount:Math.max(0,lc-1), loanNote: lc-1===0?"":v.loanNote }); }, style: cBtn(P.card, P.orange, lc===0) }, "−"),
       e("span", { style: { fontWeight:900,fontSize:20,minWidth:26,textAlign:"center",color:lc>0?P.orange:P.muted } }, lc),
       e("button", { onClick:()=>{ SFX.loan(); onChange({ ...v, loanCount:Math.min(lc+1, maxLoan) }); }, style: cBtn(P.orange, "#fff", lc>=maxLoan) }, "+")
     ),
-    showNote && e("input", { value: v?.loanNote||"", onChange: e=>onChange({ ...v, loanNote:e.target.value }), placeholder: "📋 說明（如：外借加護病房 / 維修中）",
+    showNote && e("input", { value: v?.loanNote||"", onChange: e=>onChange({ ...v, loanNote:e.target.value }), placeholder: "📋 說明（如：外借加護 / 維修中）",
       style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.orange}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#5a3000" } })
   );
 }
 
-function SplitItemRow({ cfg, value, onChange, hasError }) {
-  const v    = value || { count:0, beds:[], loanCount:0, loanNote:"", note:"" };
-  const eMax = effPoolMax(cfg, v);
-  const tot  = (v.count||0)+(v.beds?.length||0);
-  const diff = eMax - tot;
-  const bedRem = eMax - (v.count||0) - (v.beds?.length||0);
-
-  function setCount(n) { onChange({ ...v, count:Math.max(0,Math.min(n, eMax-(v.beds?.length||0))) }); }
-  function setBeds(beds) { onChange({ ...v, beds:beds.slice(0, eMax-(v.count||0)) }); }
-
-  const statusColor = diff===0?P.mint:P.coral;
-  const statusLabel = diff===0?`✓ 已全數交代 ${eMax} 個`:diff>0?`還差 ${diff} 個未交代`:`超出 ${-diff} 個`;
-  const pct = eMax>0?Math.min(tot/eMax,1):tot>0?1:0;
+function CountItemRow({ cfg, value, onChange, hasError }) {
+  const v = value || { count: 0, loanCount: 0, loanNote: "", note: "" };
+  const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
+  const mismatch = (v.count || 0) !== effExpected;
 
   return e("div", { style: { background:hasError?P.coralL:P.card,borderRadius:16,padding:"14px 14px 10px",marginBottom:10,border:`2px solid ${hasError?P.coral:P.border}`,boxShadow:"0 2px 8px #7C5CBF11" } },
     e("div", { style: { display:"flex",alignItems:"center",gap:8,marginBottom:10 } },
       e("span", { style: { fontSize:22 } }, cfg.icon),
       e("span", { style: { flex:1,fontWeight:700,fontSize:15,color:"#2D2A4A" } }, cfg.label),
-      e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:diff===0?P.mintL:P.coralL,color:statusColor,border:`1px solid ${statusColor}55` } }, statusLabel)
-    ),
-    e("div", { style: { display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 } },
-      e("div", { style: { background:P.priL,borderRadius:12,padding:"10px 12px",border:`1px solid ${P.border}` } },
-        e("div", { style: { fontSize:12,color:P.pri,fontWeight:700,marginBottom:8 } }, "📦 數量（護理站備用）"),
-        e("div", { style: { display:"flex",alignItems:"center",gap:8,justifyContent:"center" } },
-          e("button", { onClick:()=>{ SFX.minus(); setCount((v.count||0)-1); }, style: cBtn(P.card,P.pri,(v.count||0)===0) }, "−"),
-          e("span", { style: { fontWeight:900,fontSize:24,minWidth:28,textAlign:"center",color:P.pri } }, v.count||0),
-          e("button", { onClick:()=>{ SFX.plus(); setCount((v.count||0)+1); }, style: cBtn(P.pri,P.card,bedRem<=0&&(v.count||0)>=eMax) }, "+")
-        ),
-        e("div", { style: { fontSize:11,color:P.muted,textAlign:"center",marginTop:5 } }, "個放置護理站")
-      ),
-      e("div", { style: { background:P.tealL,borderRadius:12,padding:"10px 12px",border:`1px solid ${P.teal}44` } },
-        e("div", { style: { fontSize:12,color:P.teal,fontWeight:700,marginBottom:8 } }, "🛏 使用中"),
-        e("div", { style: { fontWeight:900,fontSize:24,textAlign:"center",color:P.teal,padding:"4px 0" } }, v.beds?.length||0),
-        e("div", { style: { fontSize:11,color:P.muted,textAlign:"center",marginTop:5 } }, "床（點選床號）")
-      )
-    ),
-    e("div", { style: { marginBottom:10 } },
-      e("div", { style: { height:8,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}` } },
-        e("div", { style: { height:"100%",width:`${pct*100}%`,background:statusColor,borderRadius:8,transition:"width .2s" } })
-      ),
-      e("div", { style: { fontSize:11,marginTop:4,textAlign:"right",fontWeight:700,color:statusColor } },
-        `${tot} / ${eMax} 個 ${diff>0?`⚠ 還差 ${diff} 個`:diff<0?`⚠ 超出 ${-diff} 個`:"✓ 全數交代完畢"}`
-      )
-    ),
-    e(BedPicker, { selected: v.beds||[], onChange: setBeds, remaining: bedRem }),
-    e("div", { style: { marginTop:10 } }, e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.poolMax })),
-    e("input", { placeholder: "📝 備註（選填）", value: v.note||"", onChange: e=>onChange({ ...v,note:e.target.value }),
-      style: { width:"100%",marginTop:0,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${P.border}`,fontSize:13,boxSizing:"border-box",outline:"none",background:P.bg } })
-  );
-}
-
-function CountOnlyRow({ cfg, value, onChange, hasError }) {
-  const v   = value || { count:0, loanCount:0, loanNote:"", note:"" };
-  const eff = effExpected(cfg, v);
-  const lc  = v.loanCount||0;
-  const mismatch = eff!=null && (v.count||0)!==eff;
-
-  return e("div", { style: { background:hasError?P.coralL:P.card,borderRadius:16,padding:"14px 14px 10px",marginBottom:10,border:`2px solid ${hasError?P.coral:P.border}`,boxShadow:"0 2px 8px #7C5CBF11" } },
-    e("div", { style: { display:"flex",alignItems:"center",gap:8,marginBottom:10 } },
-      e("span", { style: { fontSize:22 } }, cfg.icon),
-      e("span", { style: { flex:1,fontWeight:700,fontSize:15,color:"#2D2A4A" } }, cfg.label),
-      eff!=null && e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:mismatch?P.coralL:P.mintL,color:mismatch?P.coral,border:`1px solid ${mismatch?P.coral:P.mint}55` } }, `應有 ${eff} 個${lc>0?`（外借 ${lc}）`:""}`)
+      e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:mismatch?P.coralL:P.mintL,color:mismatch?P.coral:P.mint,border:`1px solid ${mismatch?P.coral:P.mint}55` } }, `應有 ${effExpected} ${v.loanCount>0?`（外借 ${v.loanCount}）`:""}`)
     ),
     e("div", { style: { display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"10px 0",marginBottom:8 } },
       e("button", { onClick:()=>{ SFX.minus(); onChange({ ...v,count:Math.max(0,(v.count||0)-1) }); }, style: cBtn(P.card,P.pri,(v.count||0)===0) }, "−"),
       e("div", { style: { textAlign:"center" } },
         e("div", { style: { fontWeight:900,fontSize:36,color:mismatch?P.coral:P.pri,lineHeight:1 } }, v.count||0),
-        e("div", { style: { fontSize:11,color:P.muted,marginTop:4 } }, "個（實際在場）")
+        e("div", { style: { fontSize:11,color:P.muted,marginTop:4 } }, "現有在場數量")
       ),
       e("button", { onClick:()=>{ SFX.plus(); onChange({ ...v,count:Math.min((v.count||0)+1,cfg.max||99) }); }, style: cBtn(P.pri,P.card) }, "+")
     ),
-    eff!=null && e("div", { style: { height:8,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}`,marginBottom:10 } },
-      e("div", { style: { height:"100%",width:`${Math.min((v.count||0)/Math.max(eff,1),1)*100}%`,background:mismatch?P.coral:P.mint,borderRadius:8,transition:"width .2s" } })
+    e("div", { style: { height:8,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}`,marginBottom:10 } },
+      e("div", { style: { height:"100%",width:`${Math.min((v.count||0)/Math.max(effExpected,1),1)*100}%`,background:mismatch?P.coral:P.mint,borderRadius:8,transition:"width .2s" } })
     ),
-    e(LoanRow, { v: v, onChange: onChange, maxLoan: 99 }),
+    e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.max }),
     e("input", { placeholder: "📝 備註（選填）", value: v.note||"", onChange: e=>onChange({ ...v,note:e.target.value }),
       style: { width:"100%",marginTop:6,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${P.border}`,fontSize:13,boxSizing:"border-box",outline:"none",background:P.bg } })
   );
 }
 
-function CheckboxRow({ checked, label, icon, onToggle, subLabel="" }) {
+function CheckboxItemRow({ label, icon, subtext, checked, onToggle, activeColor=P.mint, activeBg=P.mintL }) {
   return e("button", { 
-    onClick: onToggle,
-    style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? P.mint : '#E4DEFF'}`, borderRadius: "16px", padding: "14px 16px", marginBottom: "10px", cursor: "pointer", outline: "none", textAlign: "left" }
+    onClick: () => { SFX.toggle(); onToggle(); },
+    style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? activeColor : '#E4DEFF'}`, borderRadius: "16px", padding: "16px", marginBottom: "12px", cursor: "pointer", transition: "all 0.15s ease", outline: "none", textAlign: "left" }
   },
-    e("div", { style: { width: "22px", height: "22px", border: `2px solid ${checked ? P.mint : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? P.mint : "#fff", color: "#fff", fontWeight: "bold", fontSize: "14px", flexShrink: 0 } }, checked ? "✓" : ""),
+    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0 } }, checked ? "✓" : ""),
     e("div", { style: { flex: 1 } },
-      e("span", { style: { fontSize: "15px", fontWeight: "700", color: "#2D2A4A" } }, `${icon} ${label}`),
-      subLabel && e("div", { style: { fontSize: "12px", color: P.muted, marginTop: 2, fontWeight: "normal" } }, subLabel)
+      e("span", { style: { fontSize: "16px", fontWeight: "700", color: "#2D2A4A", display: "block" } }, `${icon} ${label}`),
+      subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block" } }, subtext)
     ),
-    e("span", { style: { fontSize: "12px", fontWeight: "700", padding: "3px 10px", borderRadius: "20px", background: checked ? P.mintL : P.coralL, color: checked ? P.mint : P.coral, flexShrink:0 } }, checked ? "✓ 已完成" : "未完成")
+    e("span", { style: { fontSize: "12px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px", background: checked ? activeBg : P.coralL, color: checked ? activeColor : P.coral } }, checked ? "✓ 已核對" : "未完成")
   );
 }
 
@@ -360,13 +245,14 @@ const inp = { width:"100%",padding:"10px 14px",borderRadius:12,marginTop:4,borde
 
 function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const today = new Date().toISOString().split("T")[0];
-  const [nurse,    setNurse]    = useState(editRecord?.nurse||"");
-  const [date,     setDate]     = useState(editRecord?.date||today);
-  const [shift,    setShift]    = useState(editRecord?.shift||null);
-  const [items,    setItems]    = useState(editRecord?itemsFromRecord(editRecord):defaultItems());
+  const [nurse,           setNurse]           = useState(editRecord?.nurse||"");
+  const [date,            setDate]            = useState(editRecord?.date||today);
+  const [shift,           setShift]           = useState(editRecord?.shift||null);
+  const [items,           setItems]           = useState(editRecord?itemsFromRecord(editRecord):defaultItems());
   
-  const [cssChecked, setCssChecked] = useState(editRecord?.cssChecked || false);
-  const [pinChecked, setPinChecked] = useState(editRecord?.pinChecked || false);
+  // 打勾選項狀態
+  const [supplyComputerChecked, setSupplyComputerChecked] = useState(editRecord?.supplyComputerChecked || false);
+  const [headNailChecked,       setHeadNailChecked]       = useState(editRecord?.headNailChecked || false);
 
   const [modal,   setModal]   = useState(null);
   const [saving,  setSaving]  = useState(false);
@@ -374,9 +260,11 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [carried, setCarried] = useState(false);
   const [goAfter, setGoAfter] = useState(false);
 
+  // 判斷是否為週二 (0=週日, 1=週一, 2=週二, ...)
+  const isTuesday = new Date(date).getDay() === 2;
+
   function closeModal() { if (goAfter) { setModal(null); onDone(); } else setModal(null); }
   const isEdit = !!editRecord;
-  const showTuesdayItems = isTuesday(date);
 
   function pickShift(s) {
     SFX.toggle(); setShift(s);
@@ -385,8 +273,8 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       const prevRec = [...(records || [])].filter(r=>r&&r.shift===prev).sort((a,b)=>b.createdAt?.localeCompare(a.createdAt))[0];
       if (prevRec) { 
         setItems(itemsFromRecord(prevRec)); 
-        setCssChecked(prevRec.cssChecked || false);
-        setPinChecked(prevRec.pinChecked || false);
+        setSupplyComputerChecked(prevRec.supplyComputerChecked || false);
+        setHeadNailChecked(prevRec.headNailChecked || false);
         setCarried(true); 
         setTimeout(()=>setCarried(false),3500); 
       }
@@ -399,7 +287,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     if (!nurse.trim()) { SFX.error(); setModal({ type:"error",title:"請填寫護理師姓名",body:"姓名欄位不能空白！" }); return; }
     if (!shift)        { SFX.error(); setModal({ type:"error",title:"請選擇班別",body:"請先選擇本次點班的班別！" }); return; }
     
-    const errs = validate(items, date);
+    const errs = validate(items, isTuesday);
     if (errs.length) {
       SFX.error();
       setModal({ type:"error",title:"數量異常，無法儲存 🧠",
@@ -410,9 +298,12 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     setSaving(true);
     const record = {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
-      cssChecked,
-      pinChecked: showTuesdayItems ? pinChecked : false,
-      items: ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,beds:[],loanCount:0,loanNote:"",note:"" } })),
+      supplyComputerChecked,
+      headNailChecked: isTuesday ? headNailChecked : false, // 非週二強制清空
+      items: [
+        ...ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",note:"" } })),
+        ...(isTuesday ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",note:"" } })) : [])
+      ],
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
 
@@ -422,35 +313,33 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       const payload = {
         targetSheet: "5號車",
         nurse: record.nurse, date: record.date, shift: record.shift, submittedAt: record.updatedAt, isEdit,
-        cssCheck: record.cssChecked ? "已完成" : "未完成",
-        pinCheck: showTuesdayItems ? (record.pinChecked ? "已完成" : "未完成") : "非週二免點",
-        items: ITEMS_CONFIG.map(cfg => {
-          if (cfg.weeklyOnly && !showTuesdayItems) {
-            return { id:cfg.id, label:cfg.label, count:0, beds:"", loanCount:0, loanNote:"", note:"非週二免點", expected:0 };
-          }
-          const v = items[cfg.id] || { count:0, beds:[], loanCount:0, loanNote:"", note:"" };
-          const expected = cfg.type==="split" ? effPoolMax(cfg, v) : effExpected(cfg, v);
-          return { id:cfg.id, label:cfg.label, count:v.count || 0, beds:v.beds ? v.beds.join("、") : "", loanCount:v.loanCount || 0, loanNote:v.loanNote || "", note:v.note || "", expected:expected };
+        supplyComputer: record.supplyComputerChecked ? "已完成" : "未完成",
+        headNail: isTuesday ? (record.headNailChecked ? "已打勾" : "未完成") : "非週二不需點",
+        items: (record.items || []).map(it => {
+          const v = it.value;
+          const allCfg = [...ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
+          const cfg = allCfg.find(c=>c.id===it.id);
+          return { id:it.id, label:it.label, count:v.count || 0, loanCount:v.loanCount || 0, loanNote:v.loanNote || "", note:v.note || "", expected:cfg?.expected || 0 };
         }),
       };
       await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(payload) });
       setSyncing(false); SFX.success(); setGoAfter(true);
-      setModal({ type:"success", title:"雲端同步成功 ☁️✅", body:"點班資料已成功同步至雲端試算表！按確認返回紀錄頁面。" });
+      setModal({ type:"success", title:"雲端同步成功 ☁️✅", body:"5號車點班資料已成功同步至雲端試算表！按確認返回紀錄頁面。" });
     } catch (err) {
       setSyncing(false); SFX.error();
       setModal({ type:"warn", title:"雲端同步失敗 ⚠️", body:`資料已儲存於本機，但同步試算表時發生錯誤。\n（${err.message}）\n\n可稍後再試。` });
     }
   }
 
-  const errIds = new Set(shift?validate(items, date).map(e=>e.id):[]);
+  const errIds = new Set(shift?validate(items, isTuesday).map(e=>e.id):[]);
 
   return e("div", { style: { paddingBottom:90 } },
     syncing && e(SyncingOverlay),
     modal && e(Modal, { type: modal.type, title: modal.title, body: modal.body, onClose: closeModal }),
     e("div", { style: { background:`linear-gradient(135deg,${P.pri} 0%,${P.teal} 100%)`,borderRadius:20,padding:"18px 20px",marginBottom:14,color:"#fff",boxShadow:`0 6px 20px ${P.pri}44` } },
-      e("div", { style: { fontSize:28,marginBottom:4 } }, isEdit?"✏️":"🧠"),
+      e("div", { style: { fontSize:28,marginBottom:4 } }, isEdit?"✏️":"🏥"),
       e("div", { style: { fontWeight:900,fontSize:20 } }, isEdit?"修改點班紀錄":"開始點班囉！"),
-      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房-5號車 · 共 ${ALL_BEDS.length} 床`)
+      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房-5號車 · 專屬儀器與排班點檢`)
     ),
     e("div", { style: { background:P.card,borderRadius:18,padding:16,marginBottom:12,boxShadow:"0 2px 12px #7C5CBF18",border:`1px solid ${P.border}` } },
       e("label", { style: lbl }, "👩‍⚕️ 護理師姓名 ", e("span", { style: { color: P.coral } }, "*")),
@@ -463,41 +352,57 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
           e("button", { key: s, onClick: ()=>pickShift(s), style: { flex:1,padding:"14px 0",borderRadius:14,fontWeight:700,fontSize:15,cursor:"pointer",border:`2.5px solid ${shift===s?SBDS[i]:P.border}`,background:shift===s?SBGS[i]:P.card, color:shift===s?SBDS[i]:P.muted,transition:"all .15s",boxShadow:shift===s?`0 4px 12px ${SBDS[i]}44`:"none" } }, `${SHIFT_EMOJI[i]} ${s}`)
         )
       ),
-      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認後修改")
+      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認後修改"),
+      isTuesday && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 今日為【週二】，以下已自動解鎖並開啟週二特殊點班項目。")
     ),
     
     e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #7C5CBF18",marginBottom:14,border:`1px solid ${P.border}` } },
       e("div", { style: { fontWeight:800,fontSize:16,color:P.pri,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
-        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 點班項目清單")
+        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 常態點班項目")
       ),
       
-      e(CheckboxRow, { 
-        checked: cssChecked, 
-        label: "供應室器械電腦點班", 
-        icon: "💻", 
-        subLabel: "👉 包含：縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
-        onToggle: () => { SFX.toggle(); setCssChecked(!cssChecked); } 
+      // 電腦點班打勾選項
+      e(CheckboxItemRow, {
+        label: "供應室器械電腦點班",
+        icon: "💻",
+        subtext: "縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
+        checked: supplyComputerChecked,
+        onToggle: () => setSupplyComputerChecked(!supplyComputerChecked)
       }),
 
-      showTuesdayItems && e(CheckboxRow, { 
-        checked: pinChecked, 
-        label: "頭釘釘子 (週二限定)", 
-        icon: "📌", 
-        subLabel: "⚠️ 備註：2週內過期需重新包消",
-        onToggle: () => { SFX.toggle(); setPinChecked(!pinChecked); } 
-      }),
+      // 常態數量點班項目
+      ITEMS_CONFIG.map(cfg=>
+        e(CountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
+      )
+    ),
 
-      ITEMS_CONFIG.map(cfg=> {
-        if (cfg.weeklyOnly && !showTuesdayItems) return null;
-        return cfg.type === "split"
-          ? e(SplitItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
-          : e(CountOnlyRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) });
+    // 週二特殊點班區塊
+    isTuesday && e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #FFA94D22",marginBottom:14,border:`2px solid ${P.amber}` } },
+      e("div", { style: { fontWeight:800,fontSize:16,color:P.orange,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
+        e("span", { style: { background:P.amberL,borderRadius:10,padding:"4px 10px" } }, "🗓️ 週二限定特殊點班")
+      ),
+      
+      // 週二數量點班項目
+      TUESDAY_ITEMS_CONFIG.map(cfg=>
+        e(CountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
+      ),
+
+      // 週二頭釘釘子打勾選項
+      e(CheckboxItemRow, {
+        label: "頭釘釘子點班",
+        icon: "📌",
+        subtext: "備註：2週內過期需重新包消",
+        checked: headNailChecked,
+        onToggle: () => setHeadNailChecked(!headNailChecked),
+        activeColor: P.orange,
+        activeBg: P.orangeL
       })
     ),
+
     e("div", { style: { position:"fixed",bottom:0,left:0,right:0,padding:"12px 16px",background:P.card,borderTop:`1px solid ${P.border}`,display:"flex",gap:10,zIndex:50 } },
       e("button", { onClick: ()=>{ SFX.tap(); onCancel(); }, style: { flex:1,padding:14,borderRadius:14,border:`2px solid ${P.border}`,background:P.card,color:P.muted,fontWeight:700,fontSize:15,cursor:"pointer" } }, "取消"),
       e("button", { onClick: submit, disabled: saving||syncing, style: { flex:2.5,padding:14,borderRadius:14,border:"none",background:shift?`linear-gradient(135deg,${P.pri},${P.teal})`:P.muted,color:"#fff",fontWeight:800,fontSize:16,cursor:(saving||syncing)?"not-allowed":"pointer",opacity:(saving||syncing)?0.7:1,boxShadow:shift?`0 4px 14px ${P.pri}55`:"none" } }, 
-        saving?"儲存中…":syncing?"同步中…":isEdit?"✅ 儲存修改":"✅ 完成點班"
+        saving?"儲存中…":syncing?"同步中…":isEdit?"✅ 儲存修改":"✅ 完成5號車點班"
       )
     )
   );
@@ -506,7 +411,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 function RecordCard({ record, onDelete, onEdit }) {
   const [open,    setOpen]    = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const isRecTuesday = isTuesday(record.date);
+
+  // 判斷該筆紀錄是否包含週二項目
+  const isTuesdayRecord = new Date(record.date).getDay() === 2;
 
   return e("div", { style: { background:P.card,borderRadius:18,marginBottom:12,boxShadow:"0 2px 10px #7C5CBF15",overflow:"hidden",border:`1px solid ${P.border}` } },
     confirm && e(ConfirmModal, { title: "確定要刪除嗎？", body: "刪除後無法復原，請確認。", onConfirm: ()=>{ setConfirm(false); onDelete(record.id); }, onCancel: ()=>setConfirm(false) }),
@@ -518,38 +425,40 @@ function RecordCard({ record, onDelete, onEdit }) {
         ),
         e("div", { style: { fontSize:12,color:P.muted,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" } }, 
           `📅 ${record?.date || ""}`,
-          record?.cssChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 器械已點"),
-          isRecTuesday && record?.pinChecked && e("span", { style: { background:P.amberL,color:P.amber,border:`1px solid ${P.amber}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已檢"),
-          isRecTuesday && e("span", { style: { background:P.priL,color:P.pri,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點班")
+          record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室已點"),
+          isTuesdayRecord && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已對"),
+          isTuesdayRecord && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點")
         )
       ),
       e("span", { style: { color:P.muted,fontSize:18 } }, open?"▲":"▼")
     ),
     open && e("div", { style: { borderTop:`1px solid ${P.border}`,padding:"12px 16px" } },
-      e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:`1px solid ${P.border}` } },
+      
+      // 供應室電腦點班狀態
+      e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "💻"),
-        e("span", { style: { fontWeight:700,fontSize:13,minWidth:140 } }, "供應室器械電腦點班"),
-        e("span", { style: { color: record?.cssChecked?P.mint:P.coral,fontWeight:700,background:record?.cssChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.cssChecked?"✓ 已打勾確認":"未勾選")
+        e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "供應室器械電腦點班"),
+        e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已打勾核對":"未完成")
       ),
-      isRecTuesday && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:`1px solid ${P.border}` } },
+
+      // 週二限定頭釘釘子狀態
+      isTuesdayRecord && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "📌"),
-        e("span", { style: { fontWeight:700,fontSize:13,minWidth:140 } }, "頭釘釘子 (週二)"),
-        e("span", { style: { color: record?.pinChecked?P.mint:P.coral,fontWeight:700,background:record?.pinChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.pinChecked?"✓ 已打勾確認":"未勾選")
+        e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "頭釘釘子點班"),
+        e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已打勾確認":"未完成")
       ),
+
+      // 數量項目清單
       (record?.items || []).map(it=>{
         if (!it) return null;
-        const cfg=ITEMS_CONFIG.find(c=>c.id===it.id);
-        if (!cfg) return null;
-        if (cfg.weeklyOnly && !isRecTuesday) return null;
-
         const v=it.value, lc=v?.loanCount||0;
+        const allCfg = [...ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
+        const cfg = allCfg.find(c=>c.id===it.id);
         return e("div", { key: it.id, style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}`,flexWrap:"wrap" } },
-          e("span", { style: { fontSize:15 } }, cfg.icon),
-          e("span", { style: { fontWeight:700,fontSize:13,minWidth:140 } }, it.label),
-          cfg.type==="count_only" && e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `在場 ${v.count||0} 個`),
-          cfg.type==="split" && (v.count||0)>0 && e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `站內備用 ${v.count||0} 個`),
-          v.beds && v.beds.length > 0 && e("span", { style: { color:P.teal,fontWeight:700,background:P.tealL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `使用中: ${v.beds.join(', ')}`),
-          lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 個 (${v.loanNote || '無說明'})`),
+          e("span", { style: { fontSize:15 } }, cfg?.icon),
+          e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, it.label),
+          e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `在場 ${v.count||0} 台/支`),
+          lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 台 (${v.loanNote || '無說明'})`),
           v.note && e("span", { style: { color:P.muted,fontSize:12,width:'100%',display:'block',marginTop:2 } }, `💬 備註: ${v.note}`)
         );
       }),
@@ -584,12 +493,12 @@ function App() {
     view === "list" 
       ? e("div", null,
           e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: 'wrap', gap: 10 } },
-            e("h2", { style: { color: P.priD, fontWeight: 900 } }, "📋 5號車 點班歷史紀錄"),
+            e("h2", { style: { color: P.priD, fontWeight: 900 } }, "📋 5號車歷史紀錄"),
             e("button", { onClick: () => { SFX.nav(); setEditRecord(null); setView("form"); }, style: { padding: "10px 18px", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${P.pri}, ${P.teal})`, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 12px rgba(124,92,191,0.3)" } }, "➕ 開始點班")
           ),
           (!records || records.length === 0)
             ? e("div", { style: { textAlign: "center", padding: "40px 20px", background: P.card, borderRadius: 18, color: P.muted, border: `1px solid ${P.border}` } },
-                e("p", { style: { fontSize: 48, marginBottom: 8 } }, "📭"), e("p", { style: { fontWeight: 700 } }, "目前沒有點班紀錄"), e("p", { style: { fontSize: 13, marginTop: 4 } }, "點擊右上角「開始點班」建立一筆吧！")
+                e("p", { style: { fontSize: 48, marginBottom: 8 } }, "📭"), e("p", { style: { fontWeight: 700 } }, "目前沒有5號車點班紀錄"), e("p", { style: { fontSize: 13, marginTop: 4 } }, "點擊右上角「開始點班」建立一筆吧！")
               )
             : records.map(r => r && r.id ? e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: (rec) => { SFX.nav(); setEditRecord(rec); setView("form"); } }) : null)
         )
@@ -597,34 +506,17 @@ function App() {
   );
 }
 
-// 【超強第二道防線：萬能老舊瀏覽器相容渲染模式】
-function bootstrap() {
+document.addEventListener("DOMContentLoaded", function() {
   try {
-    var container = document.getElementById('root');
-    if (!container) return;
-    
-    // 優先使用最穩定的 ReactDOM.render 以防部分 App 內嵌瀏覽器不支援全新的 createRoot 導致死當白屏
-    if (window.ReactDOM && window.ReactDOM.render) {
-      window.ReactDOM.render(e(App), container);
-    } else if (window.ReactDOM && window.ReactDOM.createRoot) {
-      var root = window.ReactDOM.createRoot(container);
+    const container = document.getElementById('root');
+    if (container) {
+      const root = ReactDOM.createRoot(container);
       root.render(e(App));
     }
   } catch (err) {
-    // 萬一不幸失敗，立即啟動終極自救
-    var rootDiv = document.getElementById('root');
-    if (rootDiv) {
-      rootDiv.innerHTML = '<div style="padding:30px; text-align:center;"><h3 style="color:#FF6B6B;">⚠️ 系統初始化失敗</h3><button onclick="window.location.reload(true)" style="margin-top:15px; padding:10px 20px; background:#7C5CBF; color:#fff; border:none; border-radius:8px;">點此強制重整</button></div>';
-    }
+    console.error(err);
   }
-}
-
-// 確保不論網頁載入速度快慢，皆能成功觸發執行
-if (document.readyState === "complete" || document.readyState === "interactive") {
-  bootstrap();
-} else {
-  document.addEventListener("DOMContentLoaded", bootstrap);
-}
+});
 </script>
 </body>
 </html>
