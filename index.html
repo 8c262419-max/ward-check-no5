@@ -6,20 +6,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <title>8C神經外科病房-5號車</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
     body{background:#F5F0FF;font-family:'Noto Sans TC','PingFang TC',system-ui,sans-serif;padding:16px;color:#2D2A4A;}
     input,button{font-family:inherit;}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.4}}
-    @keyframes bounceIn{
-      0%{opacity:0;transform:scale(0.3);}
-      50%{opacity:1;transform:scale(1.05);}
-      70%{transform:scale(0.9);}
-      100%{transform:scale(1);}
-    }
   </style>
 </head>
 <body>
@@ -28,12 +22,12 @@
   <div style="padding:50px 20px; text-align:center; color:#7C5CBF; font-size:16px; font-weight:bold; font-family:sans-serif;">
     <div style="width:40px; height:40px; border:4px solid #E4DEFF; border-top:4px solid #7C5CBF; border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 16px;"></div>
     系統載入中...<br/>
-    <span style="font-size:12px; color:#9E9AB5; font-weight:normal; display:inline-block; margin-top:8px;">若長時間卡在此畫面，請嘗試關閉 App 重新開啟或清除暫存。</span>
+    <span style="font-size:12px; color:#9E9AB5; font-weight:normal; display:inline-block; margin-top:8px;">正在為您初始化 8C-5號車 點班系統...</span>
   </div>
 </div>
 
 <script>
-// 全域防崩潰捕捉，若有任何錯誤直接彈出提示並強制刷新
+// 【超強第一道防線】全域防崩潰，萬一出錯直接顯示強制刷新按鈕，絕不留白畫面
 window.onerror = function(message, source, lineno, colno, error) {
   var rootDiv = document.getElementById('root');
   if (rootDiv) {
@@ -72,13 +66,13 @@ for (let r = 1; r <= 22; r++) {
 const ALL_BEDS = [];
 ROOM_CONFIG.forEach(({ room, subs }) => subs.forEach(s => ALL_BEDS.push(s ? `${room}-${s}` : `${room}`)));
 
-// 常態與特殊點班配置 (weeklyOnly 代表週二限定)
+// 點班品項配置
 const ITEMS_CONFIG = [
   { id: "dressing_scissors", label: "敷料剪",               icon: "✂️", type: "count_only", expected: 1, max: 1, weeklyOnly: false },
   { id: "ipad_count",        label: "iPad",                icon: "📱", type: "split",      poolMax: 7, weeklyOnly: false },
   { id: "phone_count",       label: "手機",                icon: "📞", type: "split",      poolMax: 7, weeklyOnly: false },
   { id: "heating_lamp",      label: "烤燈",                icon: "💡", type: "count_only", expected: 1, max: 1, weeklyOnly: false },
-  // 以下為週二限定項目
+  // 週二大點班限定
   { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", type: "count_only", expected: 2, max: 2, weeklyOnly: true },
   { id: "garden_well",       label: "Garden Well",         icon: "🕳️", type: "count_only", expected: 1, max: 1, weeklyOnly: true },
   { id: "o2_cylinder_s",     label: "小桶氧氣桶",           icon: "🧪", type: "count_only", expected: 6, max: 6, weeklyOnly: true }
@@ -87,7 +81,7 @@ const ITEMS_CONFIG = [
 function isTuesday(dateStr) {
   if (!dateStr) return false;
   const d = new Date(dateStr);
-  return d.getDay() === 2; // 2 代表星期二
+  return d.getDay() === 2;
 }
 
 function defaultItems() {
@@ -157,9 +151,7 @@ function validate(items, dateStr) {
   const showTuesdayItems = isTuesday(dateStr);
 
   ITEMS_CONFIG.forEach(cfg => {
-    // 如果是週二限定品項且當天不是週二，則跳過不檢查驗證
     if (cfg.weeklyOnly && !showTuesdayItems) return;
-
     const v = items[cfg.id] || { count:0, beds:[], loanCount:0 };
     const eff = effExpected(cfg, v);
     const eMax = effPoolMax(cfg, v);
@@ -373,7 +365,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [shift,    setShift]    = useState(editRecord?.shift||null);
   const [items,    setItems]    = useState(editRecord?itemsFromRecord(editRecord):defaultItems());
   
-  // 打勾選項狀態
   const [cssChecked, setCssChecked] = useState(editRecord?.cssChecked || false);
   const [pinChecked, setPinChecked] = useState(editRecord?.pinChecked || false);
 
@@ -385,8 +376,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 
   function closeModal() { if (goAfter) { setModal(null); onDone(); } else setModal(null); }
   const isEdit = !!editRecord;
-
-  // 根據日期判斷是否為週二
   const showTuesdayItems = isTuesday(date);
 
   function pickShift(s) {
@@ -422,7 +411,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     const record = {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
       cssChecked,
-      pinChecked: showTuesdayItems ? pinChecked : false, // 非週二強制不記錄頭釘
+      pinChecked: showTuesdayItems ? pinChecked : false,
       items: ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,beds:[],loanCount:0,loanNote:"",note:"" } })),
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
@@ -436,7 +425,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         cssCheck: record.cssChecked ? "已完成" : "未完成",
         pinCheck: showTuesdayItems ? (record.pinChecked ? "已完成" : "未完成") : "非週二免點",
         items: ITEMS_CONFIG.map(cfg => {
-          // 如果是非週二的限定項目，給予特殊空值以利對齊
           if (cfg.weeklyOnly && !showTuesdayItems) {
             return { id:cfg.id, label:cfg.label, count:0, beds:"", loanCount:0, loanNote:"", note:"非週二免點", expected:0 };
           }
@@ -483,7 +471,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 點班項目清單")
       ),
       
-      // 常態打勾選項
       e(CheckboxRow, { 
         checked: cssChecked, 
         label: "供應室器械電腦點班", 
@@ -492,7 +479,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         onToggle: () => { SFX.toggle(); setCssChecked(!cssChecked); } 
       }),
 
-      // 週二限定打勾選項
       showTuesdayItems && e(CheckboxRow, { 
         checked: pinChecked, 
         label: "頭釘釘子 (週二限定)", 
@@ -501,11 +487,8 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         onToggle: () => { SFX.toggle(); setPinChecked(!pinChecked); } 
       }),
 
-      // 渲染數字/床位點班品項
       ITEMS_CONFIG.map(cfg=> {
-        // 如果是週二限定品項，且今天不是週二，則完美隱藏
         if (cfg.weeklyOnly && !showTuesdayItems) return null;
-
         return cfg.type === "split"
           ? e(SplitItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
           : e(CountOnlyRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) });
@@ -523,8 +506,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 function RecordCard({ record, onDelete, onEdit }) {
   const [open,    setOpen]    = useState(false);
   const [confirm, setConfirm] = useState(false);
-  
-  // 檢查該歷史紀錄當天是不是週二
   const isRecTuesday = isTuesday(record.date);
 
   return e("div", { style: { background:P.card,borderRadius:18,marginBottom:12,boxShadow:"0 2px 10px #7C5CBF15",overflow:"hidden",border:`1px solid ${P.border}` } },
@@ -559,8 +540,6 @@ function RecordCard({ record, onDelete, onEdit }) {
         if (!it) return null;
         const cfg=ITEMS_CONFIG.find(c=>c.id===it.id);
         if (!cfg) return null;
-        
-        // 如果是歷史紀錄是週二限定，但該筆紀錄日期不是週二，就不展開
         if (cfg.weeklyOnly && !isRecTuesday) return null;
 
         const v=it.value, lc=v?.loanCount||0;
@@ -618,18 +597,34 @@ function App() {
   );
 }
 
-// 嚴格監聽確保加載
-document.addEventListener("DOMContentLoaded", function() {
+// 【超強第二道防線：萬能老舊瀏覽器相容渲染模式】
+function bootstrap() {
   try {
-    const container = document.getElementById('root');
-    if (container) {
-      const root = ReactDOM.createRoot(container);
+    var container = document.getElementById('root');
+    if (!container) return;
+    
+    // 優先使用最穩定的 ReactDOM.render 以防部分 App 內嵌瀏覽器不支援全新的 createRoot 導致死當白屏
+    if (window.ReactDOM && window.ReactDOM.render) {
+      window.ReactDOM.render(e(App), container);
+    } else if (window.ReactDOM && window.ReactDOM.createRoot) {
+      var root = window.ReactDOM.createRoot(container);
       root.render(e(App));
     }
   } catch (err) {
-    console.error(err);
+    // 萬一不幸失敗，立即啟動終極自救
+    var rootDiv = document.getElementById('root');
+    if (rootDiv) {
+      rootDiv.innerHTML = '<div style="padding:30px; text-align:center;"><h3 style="color:#FF6B6B;">⚠️ 系統初始化失敗</h3><button onclick="window.location.reload(true)" style="margin-top:15px; padding:10px 20px; background:#7C5CBF; color:#fff; border:none; border-radius:8px;">點此強制重整</button></div>';
+    }
   }
-});
+}
+
+// 確保不論網頁載入速度快慢，皆能成功觸發執行
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  bootstrap();
+} else {
+  document.addEventListener("DOMContentLoaded", bootstrap);
+}
 </script>
 </body>
 </html>
