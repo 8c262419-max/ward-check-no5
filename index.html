@@ -23,7 +23,6 @@
 const { useState, useEffect } = React;
 const e = React.createElement;
 
-// 建議維持原有的試算表傳送位置，如需更換再自行修改 URL
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw7zsykFlp7zcyIxCP5iieN7v-82SsDEkbYPNGT1z7W7wQsyDq5rfgK5d_CfgyrGI5T/exec";
 const STORAGE_KEY = "ward_check_records_8c_v5";
 
@@ -35,25 +34,25 @@ function saveRecords(recs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recs)); } catch {}
 }
 
-// 常態點班項目設定
+// 常態點班項目設定（鎖定標準數量）
 const ITEMS_CONFIG = [
-  { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1, max: 5 },
-  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7, max: 15 },
-  { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7, max: 15 },
-  { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1, max: 5 }
+  { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1 },
+  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7 },
+  { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7 },
+  { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1 }
 ];
 
-// 每週二限定項目設定
+// 每週二限定項目設定（鎖定標準數量）
 const TUESDAY_ITEMS_CONFIG = [
-  { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2, max: 10 },
-  { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1, max: 5 },
-  { id: "o2_cylinder_small", label: "小桶氧氣桶", icon: "🟢", expected: 6, max: 15 }
+  { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2 },
+  { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1 },
+  { id: "o2_cylinder_small", label: "小桶氧氣桶", icon: "🟢", expected: 6 }
 ];
 
 function defaultItems() {
   const o = {};
-  ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", note: "" }; });
-  TUESDAY_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", note: "" }; });
+  ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "" }; });
+  TUESDAY_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "" }; });
   return o;
 }
 
@@ -61,7 +60,7 @@ function itemsFromRecord(rec) {
   const o = defaultItems();
   if (!rec || !rec.items) return o;
   (rec.items || []).forEach(it => {
-    if (it && it.id && o[it.id]) o[it.id] = { loanCount: 0, loanNote: "", note: "", ...it.value };
+    if (it && it.id && o[it.id]) o[it.id] = { loanCount: 0, loanNote: "", ...it.value };
   });
   return o;
 }
@@ -107,28 +106,23 @@ const SFX = {
 function validate(items, isTuesday) {
   const errors = [];
   
-  // 驗證常態項目
   ITEMS_CONFIG.forEach(cfg => {
     const v = items[cfg.id] || { count:0, loanCount:0 };
     const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
     if ((v.count||0) !== effExpected) {
-      const lc = v.loanCount||0;
-      errors.push({ id:cfg.id, msg:`【${cfg.label}】應有 ${effExpected} 台/支${lc>0?`（扣除外借 ${lc}）`:""}，現為 ${v.count||0}` });
+      errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準 ${cfg.expected} 扣除外借）` });
     }
   });
 
-  // 如果是週二，加開驗證特殊項目
   if (isTuesday) {
     TUESDAY_ITEMS_CONFIG.forEach(cfg => {
       const v = items[cfg.id] || { count:0, loanCount:0 };
       const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
       if ((v.count||0) !== effExpected) {
-        const lc = v.loanCount||0;
-        errors.push({ id:cfg.id, msg:`【${cfg.label}】應有 ${effExpected} 個/台${lc>0?`（扣除外借 ${lc}）`:""}，現為 ${v.count||0}` });
+        errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準 ${cfg.expected} 扣除外借）` });
       }
     });
   }
-
   return errors;
 }
 
@@ -156,7 +150,7 @@ function Modal({ title, body, onClose, type="error" }) {
 
 function ConfirmModal({ title, body, onConfirm, onCancel }) {
   useEffect(()=>{ SFX.modal(); },[]);
-  return e("div", { style: { position:"fixed",inset:0,background:"#2008",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:24 } },
+  return e("div", { position:"fixed",inset:0,background:"#2008",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:24 },
     e("div", { style: { background:P.card,borderRadius:24,padding:28,maxWidth:400,width:"100%",boxShadow:"0 16px 48px #4004" } },
       e("div", { style: { textAlign:"center",fontSize:48,marginBottom:8 } }, "🗑️"),
       e("div", { style: { fontWeight:800,fontSize:18,color:P.coral,textAlign:"center",marginBottom:12 } }, title),
@@ -170,20 +164,20 @@ function ConfirmModal({ title, body, onConfirm, onCancel }) {
 }
 
 function cBtn(bg, color, disabled=false) {
-  return { width:36,height:36,borderRadius:9,background:disabled?"#eee":bg,color:disabled?P.muted:color,
-    border:`2px solid ${disabled?P.border:P.pri}`,fontWeight:800,fontSize:20,cursor:disabled?"not-allowed":"pointer",lineHeight:1,transition:"all .1s" };
+  return { width:36,height:36,borderRadius:9,background:disabled?"#E4DEFF":bg,color:disabled?P.muted:color,
+    border:`2px solid ${disabled?P.border:P.pri}`,fontWeight:800,fontSize:20,cursor:disabled?"not-allowed":"pointer",lineHeight:1,transition:"all .1s",opacity:disabled?0.4:1 };
 }
 
 function LoanRow({ v, onChange, maxLoan }) {
   const lc = v?.loanCount || 0;
   const showNote = lc > 0;
-  return e("div", { style: { background:P.orangeL, borderRadius:12, padding:"10px 12px", marginBottom:10, border:`1.5px solid ${P.orange}44` } },
+  return e("div", { style: { background:P.orangeL, borderRadius:12, padding:"10px 12px", marginBottom:0, border:`1.5px solid ${P.orange}44` } },
     e("div", { style: { display:"flex", alignItems:"center", gap:8, marginBottom: showNote ? 8 : 0 } },
       e("span", { style: { fontSize:14 } }, "🔄"),
       e("span", { style: { fontSize:13, fontWeight:700, color:P.orange, flex:1 } }, "外借／維修台數"),
-      e("button", { onClick:()=>{ SFX.loan(); onChange({ ...v, loanCount:Math.max(0,lc-1), loanNote: lc-1===0?"":v.loanNote }); }, style: cBtn(P.card, P.orange, lc===0) }, "−"),
+      e("button", { onClick:()=>{ SFX.loan(); const nextLc = Math.max(0,lc-1); onChange({ ...v, loanCount:nextLc, count: Math.min(v.count, maxLoan - nextLc), loanNote: nextLc===0?"":v.loanNote }); }, style: cBtn(P.card, P.orange, lc===0) }, "−"),
       e("span", { style: { fontWeight:900,fontSize:20,minWidth:26,textAlign:"center",color:lc>0?P.orange:P.muted } }, lc),
-      e("button", { onClick:()=>{ SFX.loan(); onChange({ ...v, loanCount:Math.min(lc+1, maxLoan) }); }, style: cBtn(P.orange, "#fff", lc>=maxLoan) }, "+")
+      e("button", { onClick:()=>{ SFX.loan(); const nextLc = Math.min(lc+1, maxLoan); onChange({ ...v, loanCount:nextLc, count: Math.min(v.count, maxLoan - nextLc) }); }, style: cBtn(P.orange, "#fff", lc>=maxLoan) }, "+")
     ),
     showNote && e("input", { value: v?.loanNote||"", onChange: e=>onChange({ ...v, loanNote:e.target.value }), placeholder: "📋 說明（如：外借加護 / 維修中）",
       style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.orange}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#5a3000" } })
@@ -191,30 +185,36 @@ function LoanRow({ v, onChange, maxLoan }) {
 }
 
 function CountItemRow({ cfg, value, onChange, hasError }) {
-  const v = value || { count: 0, loanCount: 0, loanNote: "", note: "" };
+  const v = value || { count: 0, loanCount: 0, loanNote: "" };
+  
+  // 動態計算：當前「現場應該要有」的數量上限值與下限值（鎖定剛好等於這個數字）
   const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
   const mismatch = (v.count || 0) !== effExpected;
 
-  return e("div", { style: { background:hasError?P.coralL:P.card,borderRadius:16,padding:"14px 14px 10px",marginBottom:10,border:`2px solid ${hasError?P.coral:P.border}`,boxShadow:"0 2px 8px #7C5CBF11" } },
+  // 強制限制作動：不允許同仁手滑加超過或減低於應有值
+  const disableMinus = (v.count || 0) <= 0 || (v.count || 0) <= effExpected;
+  const disablePlus  = (v.count || 0) >= effExpected;
+
+  return e("div", { style: { background:hasError?P.coralL:P.card,borderRadius:16,padding:"14px 14px 12px",marginBottom:10,border:`2px solid ${hasError?P.coral:P.border}`,boxShadow:"0 2px 8px #7C5CBF11" } },
     e("div", { style: { display:"flex",alignItems:"center",gap:8,marginBottom:10 } },
       e("span", { style: { fontSize:22 } }, cfg.icon),
       e("span", { style: { flex:1,fontWeight:700,fontSize:15,color:"#2D2A4A" } }, cfg.label),
-      e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:mismatch?P.coralL:P.mintL,color:mismatch?P.coral:P.mint,border:`1px solid ${mismatch?P.coral:P.mint}55` } }, `應有 ${effExpected} ${v.loanCount>0?`（外借 ${v.loanCount}）`:""}`)
+      e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:mismatch?P.coralL:P.mintL,color:mismatch?P.coral:P.mint,border:`1px solid ${mismatch?P.coral:P.mint}55` } }, 
+        `標準應有 ${cfg.expected} ${v.loanCount>0?`（扣外借後現場需為 ${effExpected}）`:""}`
+      )
     ),
-    e("div", { style: { display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"10px 0",marginBottom:8 } },
-      e("button", { onClick:()=>{ SFX.minus(); onChange({ ...v,count:Math.max(0,(v.count||0)-1) }); }, style: cBtn(P.card,P.pri,(v.count||0)===0) }, "−"),
-      e("div", { style: { textAlign:"center" } },
-        e("div", { style: { fontWeight:900,fontSize:36,color:mismatch?P.coral:P.pri,lineHeight:1 } }, v.count||0),
-        e("div", { style: { fontSize:11,color:P.muted,marginTop:4 } }, "現有在場數量")
+    e("div", { style: { display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"6px 0",marginBottom:8 } },
+      e("button", { onClick:()=>{ if(!disableMinus){ SFX.minus(); onChange({ ...v, count: (v.count||0)-1 }); } }, style: cBtn(P.card, P.pri, disableMinus) }, "−"),
+      e("div", { style: { textAlign:"center", minWidth:100 } },
+        e("div", { style: { fontWeight:900,fontSize:38,color:mismatch?P.coral:P.mint,lineHeight:1 } }, v.count||0),
+        e("div", { style: { fontSize:11,color:P.muted,marginTop:6,fontWeight:600 } }, mismatch ? `❌ 數量需等於 ${effExpected}` : "✓ 數量正確")
       ),
-      e("button", { onClick:()=>{ SFX.plus(); onChange({ ...v,count:Math.min((v.count||0)+1,cfg.max||99) }); }, style: cBtn(P.pri,P.card) }, "+")
+      e("button", { onClick:()=>{ if(!disablePlus){ SFX.plus(); onChange({ ...v, count: (v.count||0)+1 }); } }, style: cBtn(P.pri, P.card, disablePlus) }, "+")
     ),
-    e("div", { style: { height:8,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}`,marginBottom:10 } },
+    e("div", { style: { height:6,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}`,marginBottom:12 } },
       e("div", { style: { height:"100%",width:`${Math.min((v.count||0)/Math.max(effExpected,1),1)*100}%`,background:mismatch?P.coral:P.mint,borderRadius:8,transition:"width .2s" } })
     ),
-    e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.max }),
-    e("input", { placeholder: "📝 備註（選填）", value: v.note||"", onChange: e=>onChange({ ...v,note:e.target.value }),
-      style: { width:"100%",marginTop:6,padding:"8px 12px",borderRadius:10,border:`1.5px solid ${P.border}`,fontSize:13,boxSizing:"border-box",outline:"none",background:P.bg } })
+    e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.expected })
   );
 }
 
@@ -223,12 +223,12 @@ function CheckboxItemRow({ label, icon, subtext, checked, onToggle, activeColor=
     onClick: () => { SFX.toggle(); onToggle(); },
     style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? activeColor : '#E4DEFF'}`, borderRadius: "16px", padding: "16px", marginBottom: "12px", cursor: "pointer", transition: "all 0.15s ease", outline: "none", textAlign: "left" }
   },
-    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0 } }, checked ? "✓" : ""),
+    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifycontent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0, display:"flex", alignItems:"center", justifyContent:"center" } }, checked ? "✓" : ""),
     e("div", { style: { flex: 1 } },
       e("span", { style: { fontSize: "16px", fontWeight: "700", color: "#2D2A4A", display: "block" } }, `${icon} ${label}`),
-      subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block" } }, subtext)
+      subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block", lineHeight: 1.4 } }, subtext)
     ),
-    e("span", { style: { fontSize: "12px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px", background: checked ? activeBg : P.coralL, color: checked ? activeColor : P.coral } }, checked ? "✓ 已核對" : "未完成")
+    e("span", { style: { fontSize: "12px", fontWeight: "700", padding: "4px 10px", borderRadius: "20px", background: checked ? activeBg : P.coralL, color: checked ? activeColor : P.coral } }, checked ? "✓ 已完成" : "未勾選")
   );
 }
 
@@ -250,7 +250,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [shift,           setShift]           = useState(editRecord?.shift||null);
   const [items,           setItems]           = useState(editRecord?itemsFromRecord(editRecord):defaultItems());
   
-  // 打勾選項狀態
   const [supplyComputerChecked, setSupplyComputerChecked] = useState(editRecord?.supplyComputerChecked || false);
   const [headNailChecked,       setHeadNailChecked]       = useState(editRecord?.headNailChecked || false);
 
@@ -260,7 +259,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [carried, setCarried] = useState(false);
   const [goAfter, setGoAfter] = useState(false);
 
-  // 判斷是否為週二 (0=週日, 1=週一, 2=週二, ...)
   const isTuesday = new Date(date).getDay() === 2;
 
   function closeModal() { if (goAfter) { setModal(null); onDone(); } else setModal(null); }
@@ -290,7 +288,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     const errs = validate(items, isTuesday);
     if (errs.length) {
       SFX.error();
-      setModal({ type:"error",title:"數量異常，無法儲存 🧠",
+      setModal({ type:"error",title:"數量防呆不通過 🧠💥",
         body: e("ul", { style: { margin:0,paddingLeft:18,lineHeight:2,fontSize:14 } }, errs.map((e,i)=>e("li", { key:i, style: { color:P.coral } }, e.msg))) });
       return;
     }
@@ -299,10 +297,10 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     const record = {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
       supplyComputerChecked,
-      headNailChecked: isTuesday ? headNailChecked : false, // 非週二強制清空
+      headNailChecked: isTuesday ? headNailChecked : false,
       items: [
-        ...ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",note:"" } })),
-        ...(isTuesday ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",note:"" } })) : [])
+        ...ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"" } })),
+        ...(isTuesday ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"" } })) : [])
       ],
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
@@ -319,15 +317,15 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
           const v = it.value;
           const allCfg = [...ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
           const cfg = allCfg.find(c=>c.id===it.id);
-          return { id:it.id, label:it.label, count:v.count || 0, loanCount:v.loanCount || 0, loanNote:v.loanNote || "", note:v.note || "", expected:cfg?.expected || 0 };
+          return { id:it.id, label:it.label, count:v.count || 0, loanCount:v.loanCount || 0, loanNote:v.loanNote || "", note: "", expected:cfg?.expected || 0 };
         }),
       };
       await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(payload) });
       setSyncing(false); SFX.success(); setGoAfter(true);
-      setModal({ type:"success", title:"雲端同步成功 ☁️✅", body:"5號車點班資料已成功同步至雲端試算表！按確認返回紀錄頁面。" });
+      setModal({ type:"success", title:"雲端同步成功 ☁️✅", body:"5號車點班資料已成功同步至雲端試算表！" });
     } catch (err) {
       setSyncing(false); SFX.error();
-      setModal({ type:"warn", title:"雲端同步失敗 ⚠️", body:`資料已儲存於本機，但同步試算表時發生錯誤。\n（${err.message}）\n\n可稍後再試。` });
+      setModal({ type:"warn", title:"雲端同步失敗 ⚠️", body:`本機紀錄儲存成功，但無法連線至雲端試算表。\n（${err.message}）` });
     }
   }
 
@@ -338,8 +336,8 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     modal && e(Modal, { type: modal.type, title: modal.title, body: modal.body, onClose: closeModal }),
     e("div", { style: { background:`linear-gradient(135deg,${P.pri} 0%,${P.teal} 100%)`,borderRadius:20,padding:"18px 20px",marginBottom:14,color:"#fff",boxShadow:`0 6px 20px ${P.pri}44` } },
       e("div", { style: { fontSize:28,marginBottom:4 } }, isEdit?"✏️":"🏥"),
-      e("div", { style: { fontWeight:900,fontSize:20 } }, isEdit?"修改點班紀錄":"開始點班囉！"),
-      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房-5號車 · 專屬儀器與排班點檢`)
+      e("div", { style: { fontWeight:900,fontSize:20 } }, isEdit?"修改 5 號車紀錄":"5 號車精密點班"),
+      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房 · 數量上下限已全面防呆鎖定`)
     ),
     e("div", { style: { background:P.card,borderRadius:18,padding:16,marginBottom:12,boxShadow:"0 2px 12px #7C5CBF18",border:`1px solid ${P.border}` } },
       e("label", { style: lbl }, "👩‍⚕️ 護理師姓名 ", e("span", { style: { color: P.coral } }, "*")),
@@ -352,46 +350,41 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
           e("button", { key: s, onClick: ()=>pickShift(s), style: { flex:1,padding:"14px 0",borderRadius:14,fontWeight:700,fontSize:15,cursor:"pointer",border:`2.5px solid ${shift===s?SBDS[i]:P.border}`,background:shift===s?SBGS[i]:P.card, color:shift===s?SBDS[i]:P.muted,transition:"all .15s",boxShadow:shift===s?`0 4px 12px ${SBDS[i]}44`:"none" } }, `${SHIFT_EMOJI[i]} ${s}`)
         )
       ),
-      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認後修改"),
-      isTuesday && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 今日為【週二】，以下已自動解鎖並開啟週二特殊點班項目。")
+      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認現場數量是否相符"),
+      isTuesday && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 偵測為【週二】，已自動開啟每週限定大點項目。")
     ),
     
     e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #7C5CBF18",marginBottom:14,border:`1px solid ${P.border}` } },
       e("div", { style: { fontWeight:800,fontSize:16,color:P.pri,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
-        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 常態點班項目")
+        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 常態精準點班")
       ),
       
-      // 電腦點班打勾選項
       e(CheckboxItemRow, {
         label: "供應室器械電腦點班",
         icon: "💻",
-        subtext: "縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
+        subtext: "核對內容：縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
         checked: supplyComputerChecked,
         onToggle: () => setSupplyComputerChecked(!supplyComputerChecked)
       }),
 
-      // 常態數量點班項目
       ITEMS_CONFIG.map(cfg=>
         e(CountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
       )
     ),
 
-    // 週二特殊點班區塊
     isTuesday && e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #FFA94D22",marginBottom:14,border:`2px solid ${P.amber}` } },
       e("div", { style: { fontWeight:800,fontSize:16,color:P.orange,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
-        e("span", { style: { background:P.amberL,borderRadius:10,padding:"4px 10px" } }, "🗓️ 週二限定特殊點班")
+        e("span", { style: { background:P.amberL,borderRadius:10,padding:"4px 10px" } }, "🗓️ 週二特定大點項目")
       ),
       
-      // 週二數量點班項目
       TUESDAY_ITEMS_CONFIG.map(cfg=>
         e(CountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id) })
       ),
 
-      // 週二頭釘釘子打勾選項
       e(CheckboxItemRow, {
         label: "頭釘釘子點班",
         icon: "📌",
-        subtext: "備註：2週內過期需重新包消",
+        subtext: "核對備註：2週內過期需重新包消",
         checked: headNailChecked,
         onToggle: () => setHeadNailChecked(!headNailChecked),
         activeColor: P.orange,
@@ -411,8 +404,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 function RecordCard({ record, onDelete, onEdit }) {
   const [open,    setOpen]    = useState(false);
   const [confirm, setConfirm] = useState(false);
-
-  // 判斷該筆紀錄是否包含週二項目
   const isTuesdayRecord = new Date(record.date).getDay() === 2;
 
   return e("div", { style: { background:P.card,borderRadius:18,marginBottom:12,boxShadow:"0 2px 10px #7C5CBF15",overflow:"hidden",border:`1px solid ${P.border}` } },
@@ -425,30 +416,24 @@ function RecordCard({ record, onDelete, onEdit }) {
         ),
         e("div", { style: { fontSize:12,color:P.muted,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" } }, 
           `📅 ${record?.date || ""}`,
-          record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室已點"),
-          isTuesdayRecord && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已對"),
+          record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室電腦已對"),
+          isTuesdayRecord && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已包消核對"),
           isTuesdayRecord && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點")
         )
       ),
       e("span", { style: { color:P.muted,fontSize:18 } }, open?"▲":"▼")
     ),
     open && e("div", { style: { borderTop:`1px solid ${P.border}`,padding:"12px 16px" } },
-      
-      // 供應室電腦點班狀態
       e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "💻"),
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "供應室器械電腦點班"),
-        e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已打勾核對":"未完成")
+        e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已打勾核對":"未勾選")
       ),
-
-      // 週二限定頭釘釘子狀態
       isTuesdayRecord && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "📌"),
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "頭釘釘子點班"),
-        e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已打勾確認":"未完成")
+        e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已打勾確認":"未勾選")
       ),
-
-      // 數量項目清單
       (record?.items || []).map(it=>{
         if (!it) return null;
         const v=it.value, lc=v?.loanCount||0;
@@ -458,8 +443,7 @@ function RecordCard({ record, onDelete, onEdit }) {
           e("span", { style: { fontSize:15 } }, cfg?.icon),
           e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, it.label),
           e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `在場 ${v.count||0} 台/支`),
-          lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 台 (${v.loanNote || '無說明'})`),
-          v.note && e("span", { style: { color:P.muted,fontSize:12,width:'100%',display:'block',marginTop:2 } }, `💬 備註: ${v.note}`)
+          lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 台 (${v.loanNote || '無說明'})`)
         );
       }),
       e("div", { style: { display:'flex',gap:8,marginTop:12,justifyContent:'flex-end' } },
@@ -493,12 +477,12 @@ function App() {
     view === "list" 
       ? e("div", null,
           e("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: 'wrap', gap: 10 } },
-            e("h2", { style: { color: P.priD, fontWeight: 900 } }, "📋 5號車歷史紀錄"),
+            e("h2", { style: { color: P.priD, fontWeight: 900 } }, "📋 5 號車點班歷史紀錄"),
             e("button", { onClick: () => { SFX.nav(); setEditRecord(null); setView("form"); }, style: { padding: "10px 18px", borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${P.pri}, ${P.teal})`, color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 12px rgba(124,92,191,0.3)" } }, "➕ 開始點班")
           ),
           (!records || records.length === 0)
             ? e("div", { style: { textAlign: "center", padding: "40px 20px", background: P.card, borderRadius: 18, color: P.muted, border: `1px solid ${P.border}` } },
-                e("p", { style: { fontSize: 48, marginBottom: 8 } }, "📭"), e("p", { style: { fontWeight: 700 } }, "目前沒有5號車點班紀錄"), e("p", { style: { fontSize: 13, marginTop: 4 } }, "點擊右上角「開始點班」建立一筆吧！")
+                e("p", { style: { fontSize: 48, marginBottom: 8 } }, "📭"), e("p", { style: { fontWeight: 700 } }, "目前沒有 5 號車點班紀錄"), e("p", { style: { fontSize: 13, marginTop: 4 } }, "請點擊右上角按鈕開始。")
               )
             : records.map(r => r && r.id ? e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: (rec) => { SFX.nav(); setEditRecord(rec); setView("form"); } }) : null)
         )
