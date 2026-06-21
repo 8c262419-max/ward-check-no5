@@ -103,7 +103,7 @@ const SFX = {
   loan:   ()=>beep(550,"triangle",0.12,0.18),
 };
 
-function validate(items, isTuesday) {
+function validate(items, isTuesdayBigCheck) {
   const errors = [];
   
   ITEMS_CONFIG.forEach(cfg => {
@@ -114,7 +114,7 @@ function validate(items, isTuesday) {
     }
   });
 
-  if (isTuesday) {
+  if (isTuesdayBigCheck) {
     TUESDAY_ITEMS_CONFIG.forEach(cfg => {
       const v = items[cfg.id] || { count:0, loanCount:0 };
       const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
@@ -150,7 +150,7 @@ function Modal({ title, body, onClose, type="error" }) {
 
 function ConfirmModal({ title, body, onConfirm, onCancel }) {
   useEffect(()=>{ SFX.modal(); },[]);
-  return e("div", { position:"fixed",inset:0,background:"#2008",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:24 },
+  return e("div", { style: { position:"fixed",inset:0,background:"#2008",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:24 } },
     e("div", { style: { background:P.card,borderRadius:24,padding:28,maxWidth:400,width:"100%",boxShadow:"0 16px 48px #4004" } },
       e("div", { style: { textAlign:"center",fontSize:48,marginBottom:8 } }, "🗑️"),
       e("div", { style: { fontWeight:800,fontSize:18,color:P.coral,textAlign:"center",marginBottom:12 } }, title),
@@ -187,11 +187,9 @@ function LoanRow({ v, onChange, maxLoan }) {
 function CountItemRow({ cfg, value, onChange, hasError }) {
   const v = value || { count: 0, loanCount: 0, loanNote: "" };
   
-  // 動態計算：當前「現場應該要有」的數量上限值與下限值（鎖定剛好等於這個數字）
   const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
   const mismatch = (v.count || 0) !== effExpected;
 
-  // 強制限制作動：不允許同仁手滑加超過或減低於應有值
   const disableMinus = (v.count || 0) <= 0 || (v.count || 0) <= effExpected;
   const disablePlus  = (v.count || 0) >= effExpected;
 
@@ -223,7 +221,7 @@ function CheckboxItemRow({ label, icon, subtext, checked, onToggle, activeColor=
     onClick: () => { SFX.toggle(); onToggle(); },
     style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? activeColor : '#E4DEFF'}`, borderRadius: "16px", padding: "16px", marginBottom: "12px", cursor: "pointer", transition: "all 0.15s ease", outline: "none", textAlign: "left" }
   },
-    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifycontent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0, display:"flex", alignItems:"center", justifyContent:"center" } }, checked ? "✓" : ""),
+    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0 } }, checked ? "✓" : ""),
     e("div", { style: { flex: 1 } },
       e("span", { style: { fontSize: "16px", fontWeight: "700", color: "#2D2A4A", display: "block" } }, `${icon} ${label}`),
       subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block", lineHeight: 1.4 } }, subtext)
@@ -259,7 +257,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [carried, setCarried] = useState(false);
   const [goAfter, setGoAfter] = useState(false);
 
+  // 防呆核心邏輯：必須是「週二」且班別點選「白班」才算大點
   const isTuesday = new Date(date).getDay() === 2;
+  const isTuesdayBigCheck = isTuesday && shift === "白班";
 
   function closeModal() { if (goAfter) { setModal(null); onDone(); } else setModal(null); }
   const isEdit = !!editRecord;
@@ -285,7 +285,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     if (!nurse.trim()) { SFX.error(); setModal({ type:"error",title:"請填寫護理師姓名",body:"姓名欄位不能空白！" }); return; }
     if (!shift)        { SFX.error(); setModal({ type:"error",title:"請選擇班別",body:"請先選擇本次點班的班別！" }); return; }
     
-    const errs = validate(items, isTuesday);
+    const errs = validate(items, isTuesdayBigCheck);
     if (errs.length) {
       SFX.error();
       setModal({ type:"error",title:"數量防呆不通過 🧠💥",
@@ -297,10 +297,11 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     const record = {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
       supplyComputerChecked,
-      headNailChecked: isTuesday ? headNailChecked : false,
+      headNailChecked: isTuesdayBigCheck ? headNailChecked : false,
+      isTuesdayBigCheck, // 標註是否為大點紀錄
       items: [
         ...ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"" } })),
-        ...(isTuesday ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"" } })) : [])
+        ...(isTuesdayBigCheck ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"" } })) : [])
       ],
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
@@ -312,7 +313,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         targetSheet: "5號車",
         nurse: record.nurse, date: record.date, shift: record.shift, submittedAt: record.updatedAt, isEdit,
         supplyComputer: record.supplyComputerChecked ? "已完成" : "未完成",
-        headNail: isTuesday ? (record.headNailChecked ? "已打勾" : "未完成") : "非週二不需點",
+        headNail: isTuesdayBigCheck ? (record.headNailChecked ? "已打勾" : "未完成") : "非週二白班不需點",
         items: (record.items || []).map(it => {
           const v = it.value;
           const allCfg = [...ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
@@ -329,7 +330,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     }
   }
 
-  const errIds = new Set(shift?validate(items, isTuesday).map(e=>e.id):[]);
+  const errIds = new Set(shift?validate(items, isTuesdayBigCheck).map(e=>e.id):[]);
 
   return e("div", { style: { paddingBottom:90 } },
     syncing && e(SyncingOverlay),
@@ -351,7 +352,8 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         )
       ),
       carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認現場數量是否相符"),
-      isTuesday && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 偵測為【週二】，已自動開啟每週限定大點項目。")
+      isTuesdayBigCheck && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 偵測為【週二白班】，已自動解鎖並開啟每週大點項目。"),
+      (isTuesday && shift && shift !== "白班") && e("div", { style: { marginTop:10,padding:"9px 14px",background:P.priL,borderRadius:12,fontSize:13,color:P.priD,fontWeight:600,border:`1.5px solid ${P.border}` } }, "ℹ️ 今日為週二，但因您的班別為【小夜/大夜】，故免除大點，僅需核對常態項目。")
     ),
     
     e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #7C5CBF18",marginBottom:14,border:`1px solid ${P.border}` } },
@@ -372,9 +374,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       )
     ),
 
-    isTuesday && e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #FFA94D22",marginBottom:14,border:`2px solid ${P.amber}` } },
+    isTuesdayBigCheck && e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #FFA94D22",marginBottom:14,border:`2px solid ${P.amber}` } },
       e("div", { style: { fontWeight:800,fontSize:16,color:P.orange,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
-        e("span", { style: { background:P.amberL,borderRadius:10,padding:"4px 10px" } }, "🗓️ 週二特定大點項目")
+        e("span", { style: { background:P.amberL,borderRadius:10,padding:"4px 10px" } }, "🗓️ 週二【白班限定】大點項目")
       ),
       
       TUESDAY_ITEMS_CONFIG.map(cfg=>
@@ -404,7 +406,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 function RecordCard({ record, onDelete, onEdit }) {
   const [open,    setOpen]    = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const isTuesdayRecord = new Date(record.date).getDay() === 2;
+  
+  // 讀取該筆舊紀錄儲存時，到底是不是大點
+  const hasBigCheck = record.isTuesdayBigCheck;
 
   return e("div", { style: { background:P.card,borderRadius:18,marginBottom:12,boxShadow:"0 2px 10px #7C5CBF15",overflow:"hidden",border:`1px solid ${P.border}` } },
     confirm && e(ConfirmModal, { title: "確定要刪除嗎？", body: "刪除後無法復原，請確認。", onConfirm: ()=>{ setConfirm(false); onDelete(record.id); }, onCancel: ()=>setConfirm(false) }),
@@ -417,8 +421,8 @@ function RecordCard({ record, onDelete, onEdit }) {
         e("div", { style: { fontSize:12,color:P.muted,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" } }, 
           `📅 ${record?.date || ""}`,
           record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室電腦已對"),
-          isTuesdayRecord && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已包消核對"),
-          isTuesdayRecord && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點")
+          hasBigCheck && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已包消"),
+          hasBigCheck && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二白班大點")
         )
       ),
       e("span", { style: { color:P.muted,fontSize:18 } }, open?"▲":"▼")
@@ -429,7 +433,7 @@ function RecordCard({ record, onDelete, onEdit }) {
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "供應室器械電腦點班"),
         e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已打勾核對":"未勾選")
       ),
-      isTuesdayRecord && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
+      hasBigCheck && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "📌"),
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "頭釘釘子點班"),
         e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已打勾確認":"未勾選")
