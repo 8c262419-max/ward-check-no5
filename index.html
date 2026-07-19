@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <title>8C神經外科病房-5號車</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -117,28 +117,25 @@ const SFX = {
   toggle: ()=>beep(660,"sine",0.08,0.15),
   plus:    ()=>beep(740,"triangle",0.07,0.14),
   minus:  ()=>beep(440,"triangle",0.07,0.12),
-  error:  (()=>{[0,0.2,0.4].forEach(d=>beep(180,"square",0.15,0.25,d));}),
-  success:(()=>{[523,659,784,1046].forEach((f,i)=>beep(f,"sine",0.18,0.2,i*0.12));}),
+  error:  ((()=>{[0,0.2,0.4].forEach(d=>beep(180,"square",0.15,0.25,d));}),),
+  success:((()=>{[523,659,784,1046].forEach((f,i)=>beep(f,"sine",0.18,0.2,i*0.12));}),),
   nav:    ()=>beep(600,"sine",0.05,0.1),
   delete: ()=>beep(300,"sawtooth",0.1,0.2),
   modal:  ()=>beep(440,"sine",0.1,0.15),
-  loan:   ()=>beep(550,"triangle",0.12,0.18),
+  loan:    ()=>beep(550,"triangle",0.12,0.18),
 };
 
 function validate(items, isTuesdayBigCheck) {
   const errors = [];
   
-  // 常態點班 4 大項目嚴格防呆
+  // 常態點班 4 大項目數量防呆
   FIXED_ITEMS_CONFIG.forEach(cfg => {
     const v = items[cfg.id] || { count:0, loanCount:0, bedNote:"" };
     const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
     if ((v.count||0) !== effExpected) {
       errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準上限 ${cfg.expected} 扣除外借）` });
     }
-    // 如果烤燈在場，但沒有選擇床號
-    if (cfg.id === "heating_lamp" && (v.count || 0) > 0 && !v.bedNote) {
-      errors.push({ id:cfg.id, msg:`【烤燈】目前在場使用中，請選擇正在使用的床號！` });
-    }
+    // 已修正：拿掉原本烤燈在場未選床號的限制（不用強制一定要選擇特定床號）
   });
 
   // 週二限定項目防呆
@@ -213,17 +210,17 @@ function LoanRow({ v, onChange, maxLoan, showBedSelect=false }) {
       style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.orange}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#5a3000",marginBottom: showBedField ? 8 : 0 } }),
     
     showBedField && e("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-      e("label", { style: { fontSize: 11, fontWeight: 700, color: P.priD } }, "🛌 烤燈正在使用中，請點選床號："),
+      e("label", { style: { fontSize: 11, fontWeight: 700, color: P.priD } }, "🛌 烤燈位置（免強制選擇特定床號）："),
       e("select", { value: v?.bedNote||"", onChange: e=>onChange({ ...v, bedNote:e.target.value }),
         style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.pri}88`,fontSize:13,boxSizing:"border-box",outline:"none",background:"#fff",color:"#2D2A4A",fontWeight: "bold" } },
-        e("option", { value: "" }, "-- 請選擇單位 37 床之使用床號 --"),
+        e("option", { value: "" }, "現場 (未固定特定床位)"),
         BEDS_LIST.map(b => e("option", { key: b, value: b }, b))
       )
     )
   );
 }
 
-// 嚴格計數元件（所有常態與大點項目均受硬性上限防呆鎖定）
+// 嚴格計數元件
 function LockedCountItemRow({ cfg, value, onChange, hasError, showBedSelect=false }) {
   const v = value || { count: 0, loanCount: 0, loanNote: "", bedNote: "" };
   
@@ -261,7 +258,7 @@ function CheckboxItemRow({ label, icon, subtext, checked, onToggle, activeColor=
     onClick: () => { SFX.toggle(); onToggle(); },
     style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? activeColor : '#E4DEFF'}`, borderRadius: "16px", padding: "16px", marginBottom: "12px", cursor: "pointer", transition: "all 0.15s ease", outline: "none", textAlign: "left" }
   },
-    e("div", { width: "24px", height: "24px", style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifycontent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0, textAlign: "center", lineheight: "20px" } }, checked ? "✓" : ""),
+    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0, textAlign: "center", lineHeight: "20px" } }, checked ? "✓" : ""),
     e("div", { style: { flex: 1 } },
       e("span", { style: { fontSize: "16px", fontWeight: "700", color: "#2D2A4A", display: "block" } }, `${icon} ${label}`),
       subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block", lineHeight: 1.4 } }, subtext)
@@ -350,6 +347,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     try {
       const payload = {
         targetSheet: "5號車",
+        sheetName: "5號車",
         nurse: record.nurse, date: record.date, shift: record.shift, submittedAt: record.updatedAt, isEdit,
         supplyComputer: record.supplyComputerChecked ? "已完成" : "未完成",
         headNail: isTuesdayBigCheck ? (record.headNailChecked ? "已打勾" : "未完成") : "非週二白班不需點",
@@ -358,7 +356,16 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
           const allCfg = [...FIXED_ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
           const cfg = allCfg.find(c=>c.id===it.id);
           const exp = cfg ? cfg.expected : 0;
-          return { id:it.id, label:it.label, count:v.count || 0, loanCount:v.loanCount || 0, loanNote:v.loanNote || "", bedNote:v.bedNote || "", note: v.bedNote ? `使用床號: ${v.bedNote}` : "", expected:exp };
+          return { 
+            id:it.id, 
+            label:it.label, 
+            count:v.count || 0, 
+            loanCount:v.loanCount || 0, 
+            loanNote:v.loanNote || "", 
+            bedNote:v.bedNote || "現場 (未固定特定床位)", 
+            note: v.bedNote ? `使用床號: ${v.bedNote}` : "現場 (未固定特定床位)", 
+            expected:exp 
+          };
         }),
       };
       await fetch(GAS_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(payload) });
@@ -484,7 +491,7 @@ function RecordCard({ record, onDelete, onEdit }) {
           e("span", { style: { fontSize:15 } }, cfg?.icon),
           e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, it.label),
           e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `在場 ${v.count||0} 台/支`),
-          (it.id === "heating_lamp" && v.bedNote) && e("span", { style: { color:"#fff",fontWeight:700,background:P.pri,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `🛌 使用床號: ${v.bedNote}`),
+          (it.id === "heating_lamp") && e("span", { style: { color:"#fff",fontWeight:700,background:P.pri,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `🛌 位置: ${v.bedNote || "現場 (未固定特定床位)"}`),
           lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 台 (${v.loanNote || '無說明'})`)
         );
       }),
@@ -524,25 +531,24 @@ function App() {
           ),
           (!records || records.length === 0)
             ? e("div", { style: { textAlign: "center", padding: "40px 20px", background: P.card, borderRadius: 18, color: P.muted, border: `1px solid ${P.border}` } },
-                e("p", { style: { fontSize: 48, marginBottom: 8 } }, "📭"), e("p", { style: { fontWeight: 700 } }, "目前沒有 5 號車點班紀錄"), e("p", { style: { fontSize: 13, marginTop: 4 } }, "請點擊右上角按鈕開始。")
+                e("p", { style: { fontSize: 44, marginBottom: 10 } }, "📭"),
+                e("p", { style: { fontWeight: 700, fontSize: 15 } }, "目前尚無任何點班紀錄"),
+                e("p", { style: { fontSize: 13, marginTop: 4, opacity: 0.8 } }, "請點擊右上角「開始點班」進行第一筆點班數據建立")
               )
-            : records.map(r => r && r.id ? e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: (rec) => { SFX.nav(); setEditRecord(rec); setView("form"); } }) : null)
+            : records.map(r => r && e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: rec => { SFX.nav(); setEditRecord(rec); setView("form"); } }))
         )
-      : e(CheckForm, { records: records, onSave: handleSave, onDone: () => { setView("list"); setEditRecord(null); }, onCancel: () => { SFX.nav(); setView("list"); setEditRecord(null); }, editRecord: editRecord })
+      : e(CheckForm, { 
+          records: records, 
+          editRecord: editRecord, 
+          onSave: handleSave, 
+          onDone: () => { setView("list"); setEditRecord(null); }, 
+          onCancel: () => { SFX.nav(); setView("list"); setEditRecord(null); } 
+        })
   );
 }
 
-document.addEventListener("DOMContentLoaded", function() {
-  try {
-    const container = document.getElementById('root');
-    if (container) {
-      const root = ReactDOM.createRoot(container);
-      root.render(e(App));
-    }
-  } catch (err) {
-    console.error(err);
-  }
-});
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(e(App));
 </script>
 </body>
 </html>
