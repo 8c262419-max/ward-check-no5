@@ -11,7 +11,7 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
     body{background:#F5F0FF;font-family:'Noto Sans TC','PingFang TC',system-ui,sans-serif;padding:16px;color:#2D2A4A;}
-    input,button{font-family:inherit;}
+    input,button,select{font-family:inherit;}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.4}}
   </style>
@@ -34,19 +34,37 @@ function saveRecords(recs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recs)); } catch {}
 }
 
-// 常態點班項目設定（可自訂數量，無硬性防呆）
-const FLEXIBLE_ITEMS_CONFIG = [
-  { id: "dressing_scissors", label: "敷料剪", icon: "✂️", defaultExpected: 1 },
-  { id: "ipad_count",        label: "iPad", icon: "📱", defaultExpected: 7 },
-  { id: "phone_count",       label: "手機點班", icon: "📞", defaultExpected: 7 }
-];
+// 自動生成 37 床床號清單（去除 4, 14 房）
+function generateBedsList() {
+  const beds = [];
+  const threeBedRooms = [1, 2, 20, 21];
+  const singleBedRooms = [3, 5, 6, 17, 18, 19, 22];
+  
+  // 巡迴 1 到 22 房
+  for (let r = 1; r <= 22; r++) {
+    if (r === 4 || r === 14) continue; // 去除 4 和 14 房
+    
+    if (threeBedRooms.includes(r)) {
+      beds.push(`8C${r}-1`, `8C${r}-2`, `8C${r}-3`);
+    } else if (singleBedRooms.includes(r)) {
+      beds.push(`8C${r}`);
+    } else {
+      beds.push(`8C${r}-1`, `8C${r}-2`);
+    }
+  }
+  return beds;
+}
+const BEDS_LIST = generateBedsList();
 
-// 需要嚴格防呆鎖定的標準項目設定
-const LOCKED_ITEMS_CONFIG = [
+// 所有常態項目的嚴格防呆設定
+const FIXED_ITEMS_CONFIG = [
+  { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1 },
+  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7 },
+  { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7 },
   { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1 }
 ];
 
-// 每週二限定項目設定（鎖定標準數量）
+// 每週二限定項目設定
 const TUESDAY_ITEMS_CONFIG = [
   { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2 },
   { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1 },
@@ -55,8 +73,7 @@ const TUESDAY_ITEMS_CONFIG = [
 
 function defaultItems() {
   const o = {};
-  FLEXIBLE_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: c.defaultExpected, loanCount: 0, loanNote: "", bedNote: "" }; });
-  LOCKED_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", bedNote: "" }; });
+  FIXED_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", bedNote: "" }; });
   TUESDAY_ITEMS_CONFIG.forEach(c => { o[c.id] = { count: 0, loanCount: 0, loanNote: "", bedNote: "" }; });
   return o;
 }
@@ -111,21 +128,26 @@ const SFX = {
 function validate(items, isTuesdayBigCheck) {
   const errors = [];
   
-  // 僅針對被鎖定精準防呆的項目進行核對 (如：烤燈)
-  LOCKED_ITEMS_CONFIG.forEach(cfg => {
-    const v = items[cfg.id] || { count:0, loanCount:0 };
+  // 常態點班 4 大項目嚴格防呆
+  FIXED_ITEMS_CONFIG.forEach(cfg => {
+    const v = items[cfg.id] || { count:0, loanCount:0, bedNote:"" };
     const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
     if ((v.count||0) !== effExpected) {
-      errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準 ${cfg.expected} 扣除外借）` });
+      errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準上限 ${cfg.expected} 扣除外借）` });
+    }
+    // 如果烤燈在場，但沒有選擇床號
+    if (cfg.id === "heating_lamp" && (v.count || 0) > 0 && !v.bedNote) {
+      errors.push({ id:cfg.id, msg:`【烤燈】目前在場使用中，請選擇正在使用的床號！` });
     }
   });
 
+  // 週二限定項目防呆
   if (isTuesdayBigCheck) {
     TUESDAY_ITEMS_CONFIG.forEach(cfg => {
       const v = items[cfg.id] || { count:0, loanCount:0 };
       const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
       if ((v.count||0) !== effExpected) {
-        errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準 ${cfg.expected} 扣除外借）` });
+        errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準上限 ${cfg.expected} 扣除外借）` });
       }
     });
   }
@@ -174,51 +196,35 @@ function cBtn(bg, color, disabled=false) {
     border:`2px solid ${disabled?P.border:P.pri}`,fontWeight:800,fontSize:20,cursor:disabled?"not-allowed":"pointer",lineHeight:1,transition:"all .1s",opacity:disabled?0.4:1 };
 }
 
-function LoanRow({ v, onChange, maxLoan, showBedNote=false }) {
+function LoanRow({ v, onChange, maxLoan, showBedSelect=false }) {
   const lc = v?.loanCount || 0;
-  const showNote = lc > 0;
+  const showLoanNote = lc > 0;
+  const showBedField = showBedSelect && (v.count || 0) > 0;
+
   return e("div", { style: { background:P.orangeL, borderRadius:12, padding:"10px 12px", marginBottom:0, border:`1.5px solid ${P.orange}44` } },
-    e("div", { style: { display:"flex", alignItems:"center", gap:8, marginBottom: (showNote || (showBedNote && lc === 0)) ? 8 : 0 } },
+    e("div", { style: { display:"flex", alignItems:"center", gap:8, marginBottom: (showLoanNote || showBedField) ? 8 : 0 } },
       e("span", { style: { fontSize:14 } }, "🔄"),
       e("span", { style: { fontSize:13, fontWeight:700, color:P.orange, flex:1 } }, "外借／維修台數"),
       e("button", { onClick:()=>{ SFX.loan(); const nextLc = Math.max(0,lc-1); onChange({ ...v, loanCount:nextLc, count: Math.min(v.count, maxLoan - nextLc), loanNote: nextLc===0?"":v.loanNote }); }, style: cBtn(P.card, P.orange, lc===0) }, "−"),
       e("span", { style: { fontWeight:900,fontSize:20,minWidth:26,textAlign:"center",color:lc>0?P.orange:P.muted } }, lc),
       e("button", { onClick:()=>{ SFX.loan(); const nextLc = Math.min(lc+1, maxLoan); onChange({ ...v, loanCount:nextLc, count: Math.min(v.count, maxLoan - nextLc), bedNote: nextLc>0?"":v.bedNote }); }, style: cBtn(P.orange, "#fff", lc>=maxLoan) }, "+")
     ),
-    showNote && e("input", { value: v?.loanNote||"", onChange: e=>onChange({ ...v, loanNote:e.target.value }), placeholder: "📋 說明（如：外借加護 / 維修中）",
-      style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.orange}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#5a3000" } }),
-    (showBedNote && lc === 0) && e("input", { value: v?.bedNote||"", onChange: e=>onChange({ ...v, bedNote:e.target.value }), placeholder: "🛌 使用中請填寫使用床號（如：8C22-1，空閒留空）",
-      style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.pri}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#2D2A4A" } })
-  );
-}
-
-// 自由計數元件（不綁定標準防呆，適合敷料剪、iPad、手機）
-function FlexibleCountItemRow({ cfg, value, onChange }) {
-  const v = value || { count: cfg.defaultExpected, loanCount: 0, loanNote: "" };
-  const disableMinus = (v.count || 0) <= 0;
-
-  return e("div", { style: { background:P.card,borderRadius:16,padding:"14px 14px 12px",marginBottom:10,border:`2px solid ${P.border}`,boxShadow:"0 2px 8px #7C5CBF11" } },
-    e("div", { style: { display:"flex",alignItems:"center",gap:8,marginBottom:10 } },
-      e("span", { style: { fontSize:22 } }, cfg.icon),
-      e("span", { style: { flex:1,fontWeight:700,fontSize:15,color:"#2D2A4A" } }, cfg.label),
-      e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:P.priL,color:P.priD,border:`1px solid ${P.border}` } }, 
-        `彈性核對 (參考基準: ${cfg.defaultExpected})`
+    showLoanNote && e("input", { value: v?.loanNote||"", onChange: e=>onChange({ ...v, loanNote:e.target.value }), placeholder: "📋 說明（如：外借加護 / 維修中）",
+      style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.orange}88`,fontSize:12,boxSizing:"border-box",outline:"none",background:"#fff",color:"#5a3000",marginBottom: showBedField ? 8 : 0 } }),
+    
+    showBedField && e("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+      e("label", { style: { fontSize: 11, fontWeight: 700, color: P.priD } }, "🛌 烤燈正在使用中，請點選床號："),
+      e("select", { value: v?.bedNote||"", onChange: e=>onChange({ ...v, bedNote:e.target.value }),
+        style: { width:"100%",padding:"7px 10px",borderRadius:9,border:`1.5px solid ${P.pri}88`,fontSize:13,boxSizing:"border-box",outline:"none",background:"#fff",color:"#2D2A4A",fontWeight: "bold" } },
+        e("option", { value: "" }, "-- 請選擇單位 37 床之使用床號 --"),
+        BEDS_LIST.map(b => e("option", { key: b, value: b }, b))
       )
-    ),
-    e("div", { style: { display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"6px 0",marginBottom:8 } },
-      e("button", { onClick:()=>{ if(!disableMinus){ SFX.minus(); onChange({ ...v, count: (v.count||0)-1 }); } }, style: cBtn(P.card, P.pri, disableMinus) }, "−"),
-      e("div", { style: { textAlign:"center", minWidth:100 } },
-        e("div", { style: { fontWeight:900,fontSize:38,color:P.priD,lineHeight:1 } }, v.count||0),
-        e("div", { style: { fontSize:11,color:P.muted,marginTop:6,fontWeight:600 } }, "可隨時增減數量")
-      ),
-      e("button", { onClick:()=>{ SFX.plus(); onChange({ ...v, count: (v.count||0)+1 }); }, style: cBtn(P.pri, P.card, false) }, "+")
-    ),
-    e(LoanRow, { v: v, onChange: onChange, maxLoan: 99, showBedNote: false })
+    )
   );
 }
 
-// 嚴格計數元件（鎖定防呆，適合烤燈與週二大點）
-function LockedCountItemRow({ cfg, value, onChange, hasError, showBedNote=false }) {
+// 嚴格計數元件（所有常態與大點項目均受硬性上限防呆鎖定）
+function LockedCountItemRow({ cfg, value, onChange, hasError, showBedSelect=false }) {
   const v = value || { count: 0, loanCount: 0, loanNote: "", bedNote: "" };
   
   const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
@@ -232,11 +238,11 @@ function LockedCountItemRow({ cfg, value, onChange, hasError, showBedNote=false 
       e("span", { style: { fontSize:22 } }, cfg.icon),
       e("span", { style: { flex:1,fontWeight:700,fontSize:15,color:"#2D2A4A" } }, cfg.label),
       e("span", { style: { fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:20,background:mismatch?P.coralL:P.mintL,color:mismatch?P.coral:P.mint,border:`1px solid ${mismatch?P.coral:P.mint}55` } }, 
-        `標準應有 ${cfg.expected} ${v.loanCount>0?`（扣外借後現場需為 ${effExpected}）`:""}`
+        `上限 ${cfg.expected} ${v.loanCount>0?`（扣外借後現場需為 ${effExpected}）`:""}`
       )
     ),
     e("div", { style: { display:"flex",alignItems:"center",justifyContent:"center",gap:16,padding:"6px 0",marginBottom:8 } },
-      e("button", { onClick:()=>{ if(!disableMinus){ SFX.minus(); onChange({ ...v, count: (v.count||0)-1 }); } }, style: cBtn(P.card, P.pri, disableMinus) }, "−"),
+      e("button", { onClick:()=>{ if(!disableMinus){ SFX.minus(); onChange({ ...v, count: (v.count||0)-1, bedNote: ((v.count||0)-1)===0?"":v.bedNote }); } }, style: cBtn(P.card, P.pri, disableMinus) }, "−"),
       e("div", { style: { textAlign:"center", minWidth:100 } },
         e("div", { style: { fontWeight:900,fontSize:38,color:mismatch?P.coral:P.mint,lineHeight:1 } }, v.count||0),
         e("div", { style: { fontSize:11,color:P.muted,marginTop:6,fontWeight:600 } }, mismatch ? `❌ 數量需等於 ${effExpected}` : "✓ 數量正確")
@@ -246,7 +252,7 @@ function LockedCountItemRow({ cfg, value, onChange, hasError, showBedNote=false 
     e("div", { style: { height:6,background:P.bg,borderRadius:8,overflow:"hidden",border:`1px solid ${P.border}`,marginBottom:12 } },
       e("div", { style: { height:"100%",width:`${Math.min((v.count||0)/Math.max(effExpected,1),1)*100}%`,background:mismatch?P.coral:P.mint,borderRadius:8,transition:"width .2s" } })
     ),
-    e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.expected, showBedNote: showBedNote })
+    e(LoanRow, { v: v, onChange: onChange, maxLoan: cfg.expected, showBedSelect: showBedSelect })
   );
 }
 
@@ -255,7 +261,7 @@ function CheckboxItemRow({ label, icon, subtext, checked, onToggle, activeColor=
     onClick: () => { SFX.toggle(); onToggle(); },
     style: { width: "100%", display: "flex", alignItems: "center", background: "#FFFFFF", border: `2px solid ${checked ? activeColor : '#E4DEFF'}`, borderRadius: "16px", padding: "16px", marginBottom: "12px", cursor: "pointer", transition: "all 0.15s ease", outline: "none", textAlign: "left" }
   },
-    e("div", { style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifyContent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0 } }, checked ? "✓" : ""),
+    e("div", { width: "24px", height: "24px", style: { width: "24px", height: "24px", border: `2px solid ${checked ? activeColor : '#7C5CBF'}`, borderRadius: "6px", marginRight: "12px", display: "flex", alignItems: "center", justifycontent: "center", background: checked ? activeColor : "#fff", color: "#fff", fontWeight: "bold", fontSize: "16px", flexShrink: 0, textAlign: "center", lineheight: "20px" } }, checked ? "✓" : ""),
     e("div", { style: { flex: 1 } },
       e("span", { style: { fontSize: "16px", fontWeight: "700", color: "#2D2A4A", display: "block" } }, `${icon} ${label}`),
       subtext && e("span", { style: { fontSize: "12px", color: P.muted, marginTop: 2, display: "block", lineHeight: 1.4 } }, subtext)
@@ -291,7 +297,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
   const [carried, setCarried] = useState(false);
   const [goAfter, setGoAfter] = useState(false);
 
-  // 防呆核心邏輯：必須是「週二」且班別點選「白班」才算大點
   const isTuesday = new Date(date).getDay() === 2;
   const isTuesdayBigCheck = isTuesday && shift === "白班";
 
@@ -332,10 +337,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
       supplyComputerChecked,
       headNailChecked: isTuesdayBigCheck ? headNailChecked : false,
-      isTuesdayBigCheck, // 標註是否為大點紀錄
+      isTuesdayBigCheck,
       items: [
-        ...FLEXIBLE_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:c.defaultExpected,loanCount:0,loanNote:"",bedNote:"" } })),
-        ...LOCKED_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })),
+        ...FIXED_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })),
         ...(isTuesdayBigCheck ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })) : [])
       ],
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -351,9 +355,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         headNail: isTuesdayBigCheck ? (record.headNailChecked ? "已打勾" : "未完成") : "非週二白班不需點",
         items: (record.items || []).map(it => {
           const v = it.value;
-          const allCfg = [...FLEXIBLE_ITEMS_CONFIG, ...LOCKED_ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
+          const allCfg = [...FIXED_ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
           const cfg = allCfg.find(c=>c.id===it.id);
-          const exp = cfg ? (cfg.expected !== undefined ? cfg.expected : cfg.defaultExpected) : 0;
+          const exp = cfg ? cfg.expected : 0;
           return { id:it.id, label:it.label, count:v.count || 0, loanCount:v.loanCount || 0, loanNote:v.loanNote || "", bedNote:v.bedNote || "", note: v.bedNote ? `使用床號: ${v.bedNote}` : "", expected:exp };
         }),
       };
@@ -373,8 +377,8 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     modal && e(Modal, { type: modal.type, title: modal.title, body: modal.body, onClose: closeModal }),
     e("div", { style: { background:`linear-gradient(135deg,${P.pri} 0%,${P.teal} 100%)`,borderRadius:20,padding:"18px 20px",marginBottom:14,color:"#fff",boxShadow:`0 6px 20px ${P.pri}44` } },
       e("div", { style: { fontSize:28,marginBottom:4 } }, isEdit?"✏️":"🏥"),
-      e("div", { style: { fontWeight:900,fontSize:20 } }, isEdit?"修改 5 號車紀錄":"5 號車精密點班"),
-      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房 · 烤燈支援床號備註 / 敷料剪與電子項目數量隨時增減`)
+      e("div", { style: { fontWeight:900,fontSize:20 } }, isEdit?"修改 5 號車紀錄":"5 號車點班"),
+      e("div", { style: { fontSize:12,opacity:0.85,marginTop:2 } }, `8C神經外科病房 · 烤燈支援單位 37 床選單與極限防呆點班機制`)
     ),
     e("div", { style: { background:P.card,borderRadius:18,padding:16,marginBottom:12,boxShadow:"0 2px 12px #7C5CBF18",border:`1px solid ${P.border}` } },
       e("label", { style: lbl }, "👩‍⚕️ 護理師姓名 ", e("span", { style: { color: P.coral } }, "*")),
@@ -387,30 +391,25 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
           e("button", { key: s, onClick: ()=>pickShift(s), style: { flex:1,padding:"14px 0",borderRadius:14,fontWeight:700,fontSize:15,cursor:"pointer",border:`2.5px solid ${shift===s?SBDS[i]:P.border}`,background:shift===s?SBGS[i]:P.card, color:shift===s?SBDS[i]:P.muted,transition:"all .15s",boxShadow:shift===s?`0 4px 12px ${SBDS[i]}44`:"none" } }, `${SHIFT_EMOJI[i]} ${s}`)
         )
       ),
-      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認現場數量與使用床號是否相符"),
-      isTuesdayBigCheck && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 偵測為【週二白班】，已自動解鎖並開啟每週大點項目。"),
-      (isTuesday && shift && shift !== "白班") && e("div", { style: { marginTop:10,padding:"9px 14px",background:P.priL,borderRadius:12,fontSize:13,color:P.priD,fontWeight:600,border:`1.5px solid ${P.border}` } }, "ℹ️ 今日為週二，但因您的班別為【小夜/大夜】，故免除大點，僅需核對常態項目。")
+      carried && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#E3FAFC",borderRadius:12,fontSize:13,color:"#0C8599",fontWeight:600,border:"1.5px solid #0C859944" } }, "✨ 已帶入上一班紀錄，請確認現場數量與烤燈使用床號"),
+      isTuesdayBigCheck && e("div", { style: { marginTop:10,padding:"9px 14px",background:"#FFF9DB",borderRadius:12,fontSize:13,color:"#E67E22",fontWeight:600,border:"1.5px solid #FFA94D55" } }, "📅 偵測為【週二白班】，已自動加載每週大點項目。")
     ),
     
     e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #7C5CBF18",marginBottom:14,border:`1px solid ${P.border}` } },
       e("div", { style: { fontWeight:800,fontSize:16,color:P.pri,marginBottom:12,display:"flex",alignItems:"center",gap:8 } },
-        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 常態精準點班")
+        e("span", { style: { background:P.priL,borderRadius:10,padding:"4px 10px" } }, "📋 點班")
       ),
       
       e(CheckboxItemRow, {
         label: "供應室器械電腦點班",
         icon: "💻",
-        subtext: "核對內容：縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
+        subtext: "核對：縫合包*2、整形拆線包*3、換藥包*10、直尖短剪*8、氣切包*1",
         checked: supplyComputerChecked,
         onToggle: () => setSupplyComputerChecked(!supplyComputerChecked)
       }),
 
-      FLEXIBLE_ITEMS_CONFIG.map(cfg=>
-        e(FlexibleCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v) })
-      ),
-
-      LOCKED_ITEMS_CONFIG.map(cfg=>
-        e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedNote: cfg.id==="heating_lamp" })
+      FIXED_ITEMS_CONFIG.map(cfg=>
+        e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedSelect: cfg.id==="heating_lamp" })
       )
     ),
 
@@ -420,13 +419,13 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       ),
       
       TUESDAY_ITEMS_CONFIG.map(cfg=>
-        e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedNote: false })
+        e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedSelect: false })
       ),
 
       e(CheckboxItemRow, {
         label: "頭釘釘子點班",
         icon: "📌",
-        subtext: "核對備註：2週內過期需重新包消",
+        subtext: "備註：2週內過期需重新包消",
         checked: headNailChecked,
         onToggle: () => setHeadNailChecked(!headNailChecked),
         activeColor: P.orange,
@@ -446,8 +445,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
 function RecordCard({ record, onDelete, onEdit }) {
   const [open,    setOpen]    = useState(false);
   const [confirm, setConfirm] = useState(false);
-  
-  // 讀取該筆舊紀錄儲存時，到底是不是大點
   const hasBigCheck = record.isTuesdayBigCheck;
 
   return e("div", { style: { background:P.card,borderRadius:18,marginBottom:12,boxShadow:"0 2px 10px #7C5CBF15",overflow:"hidden",border:`1px solid ${P.border}` } },
@@ -461,8 +458,8 @@ function RecordCard({ record, onDelete, onEdit }) {
         e("div", { style: { fontSize:12,color:P.muted,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" } }, 
           `📅 ${record?.date || ""}`,
           record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室電腦已對"),
-          hasBigCheck && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已包消"),
-          hasBigCheck && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二白班大點")
+          hasBigCheck && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已確認"),
+          hasBigCheck && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點")
         )
       ),
       e("span", { style: { color:P.muted,fontSize:18 } }, open?"▲":"▼")
@@ -471,23 +468,23 @@ function RecordCard({ record, onDelete, onEdit }) {
       e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "💻"),
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "供應室器械電腦點班"),
-        e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已打勾核對":"未勾選")
+        e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已核對":"未勾選")
       ),
       hasBigCheck && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
         e("span", { style: { fontSize:15 } }, "📌"),
         e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "頭釘釘子點班"),
-        e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已打勾確認":"未勾選")
+        e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已確認":"未勾選")
       ),
       (record?.items || []).map(it=>{
         if (!it) return null;
         const v=it.value, lc=v?.loanCount||0;
-        const allCfg = [...FLEXIBLE_ITEMS_CONFIG, ...LOCKED_ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
+        const allCfg = [...FIXED_ITEMS_CONFIG, ...TUESDAY_ITEMS_CONFIG];
         const cfg = allCfg.find(c=>c.id===it.id);
         return e("div", { key: it.id, style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}`,flexWrap:"wrap" } },
           e("span", { style: { fontSize:15 } }, cfg?.icon),
           e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, it.label),
           e("span", { style: { color:P.pri,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `在場 ${v.count||0} 台/支`),
-          (it.id === "heating_lamp" && v.bedNote) && e("span", { style: { color:P.priD,fontWeight:700,background:P.priL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `🛌 床號: ${v.bedNote}`),
+          (it.id === "heating_lamp" && v.bedNote) && e("span", { style: { color:"#fff",fontWeight:700,background:P.pri,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `🛌 使用床號: ${v.bedNote}`),
           lc > 0 && e("span", { style: { color:P.orange,fontWeight:700,background:P.orangeL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, `外借/維修 ${lc} 台 (${v.loanNote || '無說明'})`)
         );
       }),
