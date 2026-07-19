@@ -113,15 +113,15 @@ function beep(freq, type, dur, vol=0.18, delay=0) {
   } catch {}
 }
 const SFX = {
-  tap:    ()=>beep(880,"sine",0.06,0.12),
-  toggle: ()=>beep(660,"sine",0.08,0.15),
+  tap:     ()=>beep(880,"sine",0.06,0.12),
+  toggle:  ()=>beep(660,"sine",0.08,0.15),
   plus:    ()=>beep(740,"triangle",0.07,0.14),
-  minus:  ()=>beep(440,"triangle",0.07,0.12),
-  error:  ((()=>{[0,0.2,0.4].forEach(d=>beep(180,"square",0.15,0.25,d));}),),
-  success:((()=>{[523,659,784,1046].forEach((f,i)=>beep(f,"sine",0.18,0.2,i*0.12));}),),
-  nav:    ()=>beep(600,"sine",0.05,0.1),
-  delete: ()=>beep(300,"sawtooth",0.1,0.2),
-  modal:  ()=>beep(440,"sine",0.1,0.15),
+  minus:   ()=>beep(440,"triangle",0.07,0.12),
+  error:   ()=> { [0,0.2,0.4].forEach(d=>beep(180,"square",0.15,0.25,d)); },
+  success: ()=> { [523,659,784,1046].forEach((f,i)=>beep(f,"sine",0.18,0.2,i*0.12)); },
+  nav:     ()=>beep(600,"sine",0.05,0.1),
+  delete:  ()=>beep(300,"sawtooth",0.1,0.2),
+  modal:   ()=>beep(440,"sine",0.1,0.15),
   loan:    ()=>beep(550,"triangle",0.12,0.18),
 };
 
@@ -135,7 +135,6 @@ function validate(items, isTuesdayBigCheck) {
     if ((v.count||0) !== effExpected) {
       errors.push({ id:cfg.id, msg:`【${cfg.label}】數量不正確，必須剛好為 ${effExpected}（標準上限 ${cfg.expected} 扣除外借）` });
     }
-    // 已修正：拿掉原本烤燈在場未選床號的限制（不用強制一定要選擇特定床號）
   });
 
   // 週二限定項目防呆
@@ -220,7 +219,6 @@ function LoanRow({ v, onChange, maxLoan, showBedSelect=false }) {
   );
 }
 
-// 嚴格計數元件
 function LockedCountItemRow({ cfg, value, onChange, hasError, showBedSelect=false }) {
   const v = value || { count: 0, loanCount: 0, loanNote: "", bedNote: "" };
   
@@ -532,23 +530,22 @@ function App() {
           (!records || records.length === 0)
             ? e("div", { style: { textAlign: "center", padding: "40px 20px", background: P.card, borderRadius: 18, color: P.muted, border: `1px solid ${P.border}` } },
                 e("p", { style: { fontSize: 44, marginBottom: 10 } }, "📭"),
-                e("p", { style: { fontWeight: 700, fontSize: 15 } }, "目前尚無任何點班紀錄"),
-                e("p", { style: { fontSize: 13, marginTop: 4, opacity: 0.8 } }, "請點擊右上角「開始點班」進行第一筆點班數據建立")
+                e("p", { style: { fontSize: 15, fontWeight: "bold" } }, "目前尚無點班紀錄")
               )
-            : records.map(r => r && e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: rec => { SFX.nav(); setEditRecord(rec); setView("form"); } }))
+            : records.map(r => r && e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: (rec) => { setEditRecord(rec); setView("form"); } }))
         )
       : e(CheckForm, { 
           records: records, 
-          editRecord: editRecord, 
           onSave: handleSave, 
-          onDone: () => { setView("list"); setEditRecord(null); }, 
-          onCancel: () => { SFX.nav(); setView("list"); setEditRecord(null); } 
+          onDone: () => setView("list"), 
+          onCancel: () => { setView("list"); setEditRecord(null); }, 
+          editRecord: editRecord 
         })
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(e(App));
+const root = document.getElementById("root");
+ReactDOM.createRoot(root).render(e(App));
 </script>
 </body>
 </html>
