@@ -56,19 +56,19 @@ function generateBedsList() {
 }
 const BEDS_LIST = generateBedsList();
 
-// 所有常態項目的嚴格防呆設定
+// 常態點班項目設定（加入氧氣桶，設定僅白班檢查 dayShiftOnly: true）
 const FIXED_ITEMS_CONFIG = [
   { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1 },
   { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7 },
   { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7 },
-  { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1 }
+  { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1 },
+  { id: "o2_cylinder_small", label: "小桶氧氣桶 (白班限定)", icon: "🟢", expected: 6, dayShiftOnly: true }
 ];
 
-// 每週二限定項目設定
+// 每週二限定大點項目設定（已移除小桶氧氣桶）
 const TUESDAY_ITEMS_CONFIG = [
   { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2 },
-  { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1 },
-  { id: "o2_cylinder_small", label: "小桶氧氣桶", icon: "🟢", expected: 6 }
+  { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1 }
 ];
 
 function defaultItems() {
@@ -125,11 +125,13 @@ const SFX = {
   loan:    ()=>beep(550,"triangle",0.12,0.18),
 };
 
-function validate(items, isTuesdayBigCheck) {
+function validate(items, isTuesdayBigCheck, shift) {
   const errors = [];
   
-  // 常態點班 4 大項目數量防呆
+  // 常態點班項目防呆 (帶有 dayShiftOnly 的項目僅白班檢查)
   FIXED_ITEMS_CONFIG.forEach(cfg => {
+    if (cfg.dayShiftOnly && shift !== "白班") return; // 小夜、大夜跳過檢查
+    
     const v = items[cfg.id] || { count:0, loanCount:0, bedNote:"" };
     const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
     if ((v.count||0) !== effExpected) {
@@ -319,7 +321,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     if (!nurse.trim()) { SFX.error(); setModal({ type:"error",title:"請填寫護理師姓名",body:"姓名欄位不能空白！" }); return; }
     if (!shift)        { SFX.error(); setModal({ type:"error",title:"請選擇班別",body:"請先選擇本次點班的班別！" }); return; }
     
-    const errs = validate(items, isTuesdayBigCheck);
+    const errs = validate(items, isTuesdayBigCheck, shift);
     if (errs.length) {
       SFX.error();
       setModal({ type:"error",title:"數量防呆不通過 🧠💥",
@@ -328,13 +330,17 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     }
 
     setSaving(true);
+
+    // 過濾欲儲存之常態項目（若為小夜/大夜則不存氧氣桶，或是存為未啟用）
+    const validFixedConfigs = FIXED_ITEMS_CONFIG.filter(c => !c.dayShiftOnly || shift === "白班");
+
     const record = {
       id: isEdit?editRecord.id:Date.now(), date, shift, nurse:nurse.trim(),
       supplyComputerChecked,
       headNailChecked: isTuesdayBigCheck ? headNailChecked : false,
       isTuesdayBigCheck,
       items: [
-        ...FIXED_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })),
+        ...validFixedConfigs.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })),
         ...(isTuesdayBigCheck ? TUESDAY_ITEMS_CONFIG.map(c=>({ id:c.id,label:c.label,value:items[c.id]||{ count:0,loanCount:0,loanNote:"",bedNote:"" } })) : [])
       ],
       createdAt: isEdit?editRecord.createdAt:new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -375,7 +381,7 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     }
   }
 
-  const errIds = new Set(shift?validate(items, isTuesdayBigCheck).map(el=>el.id):[]);
+  const errIds = new Set(shift?validate(items, isTuesdayBigCheck, shift).map(el=>el.id):[]);
 
   return e("div", { style: { paddingBottom:90 } },
     syncing && e(SyncingOverlay),
@@ -413,9 +419,11 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
         onToggle: () => setSupplyComputerChecked(!supplyComputerChecked)
       }),
 
-      FIXED_ITEMS_CONFIG.map(cfg=>
-        e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedSelect: cfg.id==="heating_lamp" })
-      )
+      FIXED_ITEMS_CONFIG.map(cfg=> {
+        // 如果該項目僅限白班，且當前選擇小夜或大夜，則自動隱藏
+        if (cfg.dayShiftOnly && shift && shift !== "白班") return null;
+        return e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedSelect: cfg.id==="heating_lamp" });
+      })
     ),
 
     isTuesdayBigCheck && e("div", { style: { background:P.card,borderRadius:18,padding:"14px 14px 4px",boxShadow:"0 2px 12px #FFA94D22",marginBottom:14,border:`2px solid ${P.amber}` } },
@@ -530,22 +538,16 @@ function App() {
           (!records || records.length === 0)
             ? e("div", { style: { textAlign: "center", padding: "40px 20px", background: P.card, borderRadius: 18, color: P.muted, border: `1px solid ${P.border}` } },
                 e("p", { style: { fontSize: 44, marginBottom: 10 } }, "📭"),
-                e("p", { style: { fontSize: 15, fontWeight: "bold" } }, "目前尚無點班紀錄")
+                e("p", { style: { fontSize: 15, fontWeight: 700 } }, "目前尚無點班紀錄"),
+                e("p", { style: { fontSize: 13, marginTop: 4 } }, "點擊上方按鈕開始進行今日點班")
               )
-            : records.map(r => r && e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: (rec) => { setEditRecord(rec); setView("form"); } }))
+            : records.map(r => r && e(RecordCard, { key: r.id, record: r, onDelete: handleDelete, onEdit: rec => { setEditRecord(rec); setView("form"); } }))
         )
-      : e(CheckForm, { 
-          records: records, 
-          onSave: handleSave, 
-          onDone: () => setView("list"), 
-          onCancel: () => { setView("list"); setEditRecord(null); }, 
-          editRecord: editRecord 
-        })
+      : e(CheckForm, { records: records, onSave: handleSave, onDone: () => setView("list"), onCancel: () => setView("list"), editRecord: editRecord })
   );
 }
 
-const root = document.getElementById("root");
-ReactDOM.createRoot(root).render(e(App));
+ReactDOM.render(e(App), document.getElementById("root"));
 </script>
 </body>
 </html>
