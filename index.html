@@ -439,9 +439,9 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       ),
 
       e(CheckboxItemRow, {
-        label: "頭釘釘子點班",
-        icon: "📌",
-        subtext: "備註：2週內過期需重新包消",
+        label: "電擊器一級保養(使用N-Poral)並每周六進行放電測試",
+        icon: "⚡",
+        subtext: "備註：請落實一級保養與每週六放電測試",
         checked: headNailChecked,
         onToggle: () => setHeadNailChecked(!headNailChecked),
         activeColor: P.orange,
@@ -474,7 +474,7 @@ function RecordCard({ record, onDelete, onEdit }) {
         e("div", { style: { fontSize:12,color:P.muted,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" } }, 
           `📅 ${record?.date || ""}`,
           record?.supplyComputerChecked && e("span", { style: { background:P.mintL,color:P.mint,border:`1px solid ${P.mint}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "💻 供應室電腦已對"),
-          hasBigCheck && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "📌 頭釘已確認"),
+          hasBigCheck && record?.headNailChecked && e("span", { style: { background:P.orangeL,color:P.orange,border:`1px solid ${P.orange}55`,borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "⚡ 電擊器保養已確認"),
           hasBigCheck && e("span", { style: { background:"#FFF9DB",color:"#E67E22",border:"1px solid #FFA94D77",borderRadius:12,padding:"1px 7px",fontSize:11,fontWeight:700 } }, "🗓️ 週二大點")
         )
       ),
@@ -487,8 +487,8 @@ function RecordCard({ record, onDelete, onEdit }) {
         e("span", { style: { color: record?.supplyComputerChecked?P.mint:P.coral,fontWeight:700,background:record?.supplyComputerChecked?P.mintL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.supplyComputerChecked?"✓ 已核對":"未勾選")
       ),
       hasBigCheck && e("div", { style: { display:"flex",alignItems:"center",gap:6,padding:"7px 0",borderBottom:`1px solid ${P.border}` } },
-        e("span", { style: { fontSize:15 } }, "📌"),
-        e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "頭釘釘子點班"),
+        e("span", { style: { fontSize:15 } }, "⚡"),
+        e("span", { style: { fontWeight:700,fontSize:13,minWidth:120 } }, "電擊器一級保養(使用N-Poral)並每周六進行放電測試"),
         e("span", { style: { color: record?.headNailChecked?P.orange:P.coral,fontWeight:700,background:record?.headNailChecked?P.orangeL:P.coralL,borderRadius:10,padding:"2px 9px",fontSize:12 } }, record?.headNailChecked?"✓ 已確認":"未勾選")
       ),
       (record?.items || []).map(it=>{
