@@ -56,16 +56,16 @@ function generateBedsList() {
 }
 const BEDS_LIST = generateBedsList();
 
-// 常態點班項目設定（加入氧氣桶，設定僅白班檢查 dayShiftOnly: true）
+// 常態點班項目設定（已將 iPad 改為 6 台，小桶氧氣桶維持白班限定）
 const FIXED_ITEMS_CONFIG = [
   { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1 },
-  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 7 },
+  { id: "ipad_count",        label: "iPad", icon: "📱", expected: 6 },
   { id: "phone_count",       label: "手機點班", icon: "📞", expected: 7 },
   { id: "heating_lamp",      label: "烤燈", icon: "💡", expected: 1 },
   { id: "o2_cylinder_small", label: "小桶氧氣桶 (白班限定)", icon: "🟢", expected: 6, dayShiftOnly: true }
 ];
 
-// 每週二限定大點項目設定（已移除小桶氧氣桶）
+// 每週二限定大點項目設定
 const TUESDAY_ITEMS_CONFIG = [
   { id: "pumping_bag",       label: "輸血加壓器(Pumping Bag)", icon: "🩸", expected: 2 },
   { id: "garden_well",       label: "Garden Well", icon: "🧪", expected: 1 }
@@ -128,9 +128,8 @@ const SFX = {
 function validate(items, isTuesdayBigCheck, shift) {
   const errors = [];
   
-  // 常態點班項目防呆 (帶有 dayShiftOnly 的項目僅白班檢查)
   FIXED_ITEMS_CONFIG.forEach(cfg => {
-    if (cfg.dayShiftOnly && shift !== "白班") return; // 小夜、大夜跳過檢查
+    if (cfg.dayShiftOnly && shift !== "白班") return;
     
     const v = items[cfg.id] || { count:0, loanCount:0, bedNote:"" };
     const effExpected = Math.max(0, cfg.expected - (v.loanCount || 0));
@@ -139,7 +138,6 @@ function validate(items, isTuesdayBigCheck, shift) {
     }
   });
 
-  // 週二限定項目防呆
   if (isTuesdayBigCheck) {
     TUESDAY_ITEMS_CONFIG.forEach(cfg => {
       const v = items[cfg.id] || { count:0, loanCount:0 };
@@ -330,8 +328,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
     }
 
     setSaving(true);
-
-    // 過濾欲儲存之常態項目（若為小夜/大夜則不存氧氣桶，或是存為未啟用）
     const validFixedConfigs = FIXED_ITEMS_CONFIG.filter(c => !c.dayShiftOnly || shift === "白班");
 
     const record = {
@@ -420,7 +416,6 @@ function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
       }),
 
       FIXED_ITEMS_CONFIG.map(cfg=> {
-        // 如果該項目僅限白班，且當前選擇小夜或大夜，則自動隱藏
         if (cfg.dayShiftOnly && shift && shift !== "白班") return null;
         return e(LockedCountItemRow, { key: cfg.id, cfg: cfg, value: items[cfg.id], onChange: v=>handleChange(cfg.id,v), hasError: errIds.has(cfg.id), showBedSelect: cfg.id==="heating_lamp" });
       })
