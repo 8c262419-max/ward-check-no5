@@ -34,6 +34,14 @@ function saveRecords(recs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(recs)); } catch {}
 }
 
+// 取得台灣本地時間的當天日期 (YYYY-MM-DD)
+const getLocalDateString = () => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  const localDate = new Date(now.getTime() - offset);
+  return localDate.toISOString().split("T")[0];
+};
+
 // 自動生成 37 床床號清單（去除 4, 14 房）
 function generateBedsList() {
   const beds = [];
@@ -56,7 +64,7 @@ function generateBedsList() {
 }
 const BEDS_LIST = generateBedsList();
 
-// 常態點班項目設定（已將 iPad 改為 6 台，小桶氧氣桶維持白班限定）
+// 常態點班項目設定（iPad改為6台，小桶氧氣桶維持白班限定）
 const FIXED_ITEMS_CONFIG = [
   { id: "dressing_scissors", label: "敷料剪", icon: "✂️", expected: 1 },
   { id: "ipad_count",        label: "iPad", icon: "📱", expected: 6 },
@@ -277,7 +285,7 @@ const lbl = { fontSize:13,fontWeight:700,color:P.muted,display:"block" };
 const inp = { width:"100%",padding:"10px 14px",borderRadius:12,marginTop:4,border:`1.5px solid ${P.border}`,fontSize:15,boxSizing:"border-box",outline:"none",background:P.bg };
 
 function CheckForm({ records, onSave, onDone, onCancel, editRecord }) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const [nurse,                   setNurse]                   = useState(editRecord?.nurse||"");
   const [date,                    setDate]                    = useState(editRecord?.date||today);
   const [shift,                   setShift]                   = useState(editRecord?.shift||null);
